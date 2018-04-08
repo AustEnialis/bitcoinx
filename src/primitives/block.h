@@ -28,6 +28,9 @@ public:
     uint32_t nBits;
     uint32_t nNonce;
 
+    uint256 hashStateRoot;
+    uint256 hashUTXORoot;
+
     CBlockHeader()
     {
         SetNull();
@@ -43,6 +46,11 @@ public:
         READWRITE(nTime);
         READWRITE(nBits);
         READWRITE(nNonce);
+
+        if (CheckBCXContractVersion()) {
+            READWRITE(hashStateRoot);
+            READWRITE(hashUTXORoot);
+        }
     }
 
     void SetNull()
@@ -53,6 +61,8 @@ public:
         nTime = 0;
         nBits = 0;
         nNonce = 0;
+        hashStateRoot.SetNull();
+        hashUTXORoot.SetNull();
     }
 
     bool IsNull() const
@@ -66,6 +76,20 @@ public:
     {
         return (int64_t)nTime;
     }
+
+    bool CheckBCXVersion() const
+    {
+        return CheckBCXVersion(nVersion);
+    }
+
+    static bool CheckBCXVersion(int version);
+
+    bool CheckBCXContractVersion() const
+    {
+        return CheckBCXContractVersion(nVersion);
+    }
+
+    static bool CheckBCXContractVersion(int version);
 };
 
 
@@ -113,6 +137,8 @@ public:
         block.nTime          = nTime;
         block.nBits          = nBits;
         block.nNonce         = nNonce;
+        block.hashStateRoot  = hashStateRoot;
+        block.hashUTXORoot   = hashUTXORoot;
         return block;
     }
 

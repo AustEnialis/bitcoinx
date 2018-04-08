@@ -212,6 +212,8 @@ public:
     unsigned int nTime;
     unsigned int nBits;
     unsigned int nNonce;
+    uint256 hashStateRoot;
+    uint256 hashUTXORoot;
 
     //! (memory only) Sequential id assigned to distinguish order in which blocks are received.
     int32_t nSequenceId;
@@ -240,6 +242,8 @@ public:
         nTime          = 0;
         nBits          = 0;
         nNonce         = 0;
+        hashStateRoot  = uint256();
+        hashUTXORoot   = uint256();
     }
 
     CBlockIndex()
@@ -256,6 +260,8 @@ public:
         nTime          = block.nTime;
         nBits          = block.nBits;
         nNonce         = block.nNonce;
+        hashStateRoot  = block.hashStateRoot;
+        hashUTXORoot   = block.hashUTXORoot;
     }
 
     CDiskBlockPos GetBlockPos() const {
@@ -286,6 +292,8 @@ public:
         block.nTime          = nTime;
         block.nBits          = nBits;
         block.nNonce         = nNonce;
+        block.hashStateRoot  = hashStateRoot;
+        block.hashUTXORoot   = hashUTXORoot;
         return block;
     }
 
@@ -405,6 +413,11 @@ public:
         READWRITE(nTime);
         READWRITE(nBits);
         READWRITE(nNonce);
+
+        if (CBlockHeader::CheckBCXContractVersion(nVersion)) {
+            READWRITE(hashStateRoot);
+            READWRITE(hashUTXORoot);
+        }
     }
 
     uint256 GetBlockHash() const
@@ -416,6 +429,8 @@ public:
         block.nTime           = nTime;
         block.nBits           = nBits;
         block.nNonce          = nNonce;
+        block.hashStateRoot   = hashStateRoot;
+        block.hashUTXORoot    = hashUTXORoot;
         return block.GetHash();
     }
 

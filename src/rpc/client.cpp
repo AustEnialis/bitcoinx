@@ -129,6 +129,16 @@ static const CRPCConvertParam vRPCConvertParams[] =
     { "logging", 0, "include" },
     { "logging", 1, "exclude" },
     { "disconnectnode", 1, "nodeid" },
+    // Contract
+    { "createcontract", 1, "gasLimit" },
+    { "createcontract", 2, "gasPrice" },
+    { "createcontract", 4, "broadcast" },
+    { "createcontract", 5, "changeToSender" },
+    { "sendtocontract", 2, "amount" },
+    { "sendtocontract", 3, "gasLimit" },
+    { "sendtocontract", 4, "gasPrice" },
+    { "sendtocontract", 6, "broadcast" },
+    { "sendtocontract", 7, "changeToSender" },
     // Echo with conversion (For testing only)
     { "echojson", 0, "arg0" },
     { "echojson", 1, "arg1" },

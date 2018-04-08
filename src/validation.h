@@ -131,6 +131,9 @@ static const bool DEFAULT_PERMIT_BAREMULTISIG = true;
 static const bool DEFAULT_CHECKPOINTS_ENABLED = true;
 static const bool DEFAULT_TXINDEX = false;
 static const unsigned int DEFAULT_BANSCORE_THRESHOLD = 100;
+
+static const bool DEFAULT_LOGEVENTS = false;
+
 /** Default for -persistmempool */
 static const bool DEFAULT_PERSIST_MEMPOOL = true;
 /** Default for -mempoolreplacement */
@@ -153,6 +156,10 @@ struct BlockHasher
 {
     size_t operator()(const uint256& hash) const { return hash.GetCheapHash(); }
 };
+
+
+extern bool fRecordLogOpcodes;
+extern bool fLogEvents;
 
 extern CScript COINBASE_FLAGS;
 extern CCriticalSection cs_main;
@@ -301,14 +308,16 @@ void PruneAndFlush();
 void PruneBlockFilesManual(int nManualPruneHeight);
 
 /** Check is bcx hardfork has activated. */
-bool IsHardForkEnabled(const CBlockIndex* pindexPrev, const Consensus::Params& params);
 bool IsHardForkEnabled(int nHeight, const Consensus::Params& params);
+
+/** Check is bcx contract hardfork has activated. */
+bool IsContractHardForkEnabled(int nHeight, const Consensus::Params& params);
 
 /** (try to) add transaction to memory pool
  * plTxnReplaced will be appended to with all transactions replaced from mempool **/
 bool AcceptToMemoryPool(CTxMemPool& pool, CValidationState &state, const CTransactionRef &tx, bool fLimitFree,
                         bool* pfMissingInputs, std::list<CTransactionRef>* plTxnReplaced = nullptr,
-                        bool fOverrideMempoolLimit=false, const CAmount nAbsurdFee=0);
+                        bool fOverrideMempoolLimit=false, const CAmount nAbsurdFee=0, bool fRawTx = false);
 
 /** Convert CValidationState to a human-readable message for logging */
 std::string FormatStateMessage(const CValidationState &state);

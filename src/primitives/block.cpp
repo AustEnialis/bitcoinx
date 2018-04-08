@@ -15,11 +15,26 @@
 
 uint256 CBlockHeader::GetHash() const
 {
-    if (CheckBCXVersion(nVersion))
+    if (CheckBCXVersion())
     {
         return Blake2::SerializeHash(*this);    
     }
     return SerializeHash(*this);
+}
+
+bool CBlockHeader::CheckBCXVersion(int version)
+{
+    static const int BCX_BIT = 24;
+    return (version & VERSIONBITS_TOP_MASK) == VERSIONBITS_TOP_BITS
+        && (version >> BCX_BIT) == ((VERSIONBITS_TOP_BITS | VERSIONBITS_BCX_MASK) >> BCX_BIT);
+}
+
+bool CBlockHeader::CheckBCXContractVersion(int version)
+{
+    if (CheckBCXVersion(version)) {
+        return (version & VERSIONBITS_BCX_CONTRACT_BITS) != 0;
+    }
+    return false;
 }
 
 std::string CBlock::ToString() const
@@ -31,6 +46,8 @@ std::string CBlock::ToString() const
         hashPrevBlock.ToString(),
         hashMerkleRoot.ToString(),
         nTime, nBits, nNonce,
+        hashStateRoot.ToString(),
+        hashUTXORoot.ToString(),
         vtx.size());
     for (const auto& tx : vtx) {
         s << "  " << tx->ToString() << "\n";

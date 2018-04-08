@@ -7,12 +7,15 @@
 #include "consensus.h"
 #include "primitives/transaction.h"
 #include "script/interpreter.h"
+#include "script/standard.h"
 #include "validation.h"
 
 // TODO remove the following dependencies
 #include "chain.h"
 #include "coins.h"
 #include "utilmoneystr.h"
+
+using valtype = std::vector<unsigned char>;
  
 bool IsFinalTx(const CTransaction &tx, int nBlockHeight, int64_t nBlockTime)
 {
@@ -176,6 +179,15 @@ bool CheckTransaction(const CTransaction& tx, CValidationState &state, bool fChe
         nValueOut += txout.nValue;
         if (!MoneyRange(nValueOut))
             return state.DoS(100, false, REJECT_INVALID, "bad-txns-txouttotal-toolarge");
+
+        // Contract transaction must be standard.
+        if (txout.scriptPubKey.HasCreateContractOp() || txout.scriptPubKey.HasSendToContractOp()) {
+            std::vector<valtype> vSolutions;
+            txnouttype whichType;
+            if (!Solver(txout.scriptPubKey, whichType, vSolutions, true)) {
+                return state.DoS(100, false, REJECT_INVALID, "bad-txns-contract-nonstandard");
+            }
+        }
     }
 
     // Check for duplicate inputs - note that this check is slow so we skip it in CheckBlock

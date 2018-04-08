@@ -66,6 +66,11 @@
 #include "zmq/zmqnotificationinterface.h"
 #endif
 
+#include <libethashseal/Ethash.h>
+#include "contract/ethstate.h"
+#include "contract/txexecrecord.h"
+#include "contract/vmlog.h"
+
 bool fFeeEstimatesInitialized = false;
 static const bool DEFAULT_PROXYRANDOMIZE = true;
 static const bool DEFAULT_REST_ENABLE = false;
@@ -246,6 +251,8 @@ void Shutdown()
         pcoinsdbview = nullptr;
         delete pblocktree;
         pblocktree = nullptr;
+        EthState::Release();
+        TxExecRecord::Release();
     }
 #ifdef ENABLE_WALLET
     for (CWalletRef pwallet : vpwallets) {
@@ -1427,6 +1434,8 @@ bool AppInitMain(boost::thread_group& threadGroup, CScheduler& scheduler)
                 delete pcoinsdbview;
                 delete pcoinscatcher;
                 delete pblocktree;
+                EthState::Release();
+                TxExecRecord::Release();
 
                 pblocktree = new CBlockTreeDB(nBlockTreeDBCache, false, fReset);
 
@@ -1454,10 +1463,37 @@ bool AppInitMain(boost::thread_group& threadGroup, CScheduler& scheduler)
                 if (!mapBlockIndex.empty() && mapBlockIndex.count(chainparams.GetConsensus().hashGenesisBlock) == 0)
                     return InitError(_("Incorrect or no genesis block found. Wrong datadir for network?"));
 
+                // Contract state init
+                dev::eth::Ethash::init();
+
+                const boost::filesystem::path &contractDir = GetDataDir() / "contractstate";
+                const std::string contractDirStr(contractDir.string());
+                const dev::h256 hashDB(dev::sha3(dev::rlp("")));
+                const bool fStatus = boost::filesystem::exists(contractDir);
+                const dev::eth::BaseState &contractState = fStatus ? dev::eth::BaseState::PreExisting : dev::eth::BaseState::Empty;
+                EthState::Init(dev::u256(0), EthState::openDB(contractDirStr, hashDB, dev::WithExisting::Trust), contractDirStr, contractState);
+                TxExecRecord::Init(contractDirStr);
+
+                fRecordLogOpcodes = gArgs.IsArgSet("-record-log-opcodes");
+                VMLog::Init();
+
                 // Check for changed -txindex state
                 if (fTxIndex != gArgs.GetBoolArg("-txindex", DEFAULT_TXINDEX)) {
                     strLoadError = _("You need to rebuild the database using -reindex to change -txindex");
                     break;
+                }
+
+                 // Check for changed -logevents state
+                if (fLogEvents != gArgs.GetBoolArg("-logevents", DEFAULT_LOGEVENTS) && !fLogEvents) {
+                    strLoadError = _("You need to rebuild the database using -reindex-chainstate to enable -logevents");
+                    break;
+                }
+
+                if (!gArgs.GetBoolArg("-logevents", DEFAULT_LOGEVENTS))
+                {
+                    TxExecRecord::Instance()->Destroy();
+                    fLogEvents = false;
+                    pblocktree->WriteFlag("logevents", fLogEvents);
                 }
 
                 // Check for changed -prune state.  What we are concerned about is a user who has pruned blocks
@@ -1507,6 +1543,18 @@ bool AppInitMain(boost::thread_group& threadGroup, CScheduler& scheduler)
                     }
                     assert(chainActive.Tip() != nullptr);
                 }
+
+                // contract state
+                if (chainActive.Tip() != nullptr && CBlockHeader::CheckBCXContractVersion(chainActive.Tip()->nVersion)) {
+                    EthState::Instance()->setRoot(uintToh256(chainActive.Tip()->hashStateRoot));
+                    EthState::Instance()->setRootUTXO(uintToh256(chainActive.Tip()->hashUTXORoot));
+                } else {
+                    EthState::Instance()->setRoot(uintToh256(chainparams.GenesisBlock().hashStateRoot));
+                    EthState::Instance()->setRootUTXO(uintToh256(chainparams.GenesisBlock().hashUTXORoot));
+                    EthState::Instance()->populateFromGenesis();
+                }
+                EthState::Instance()->db().commit();
+                EthState::Instance()->dbUtxo().commit();
 
                 if (!fReset) {
                     // Note that RewindBlockIndex MUST run even if we're about to -reindex-chainstate.

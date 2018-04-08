@@ -1049,6 +1049,19 @@ bool EvalScript(std::vector<std::vector<unsigned char> >& stack, const CScript& 
                     }
                 }
                 break;
+                case OP_CREATECONTRACT:
+                case OP_SENDTOCONTRACT:
+                {
+                    valtype scriptRest(pc - 1, pend);
+                    stack.push_back(scriptRest);
+                    return true; // temp
+                }
+                break;
+                case OP_SPEND:
+                {
+                    return true; // temp
+                }
+                break;
 
                 default:
                     return set_error(serror, SCRIPT_ERR_BAD_OPCODE);

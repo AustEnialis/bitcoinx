@@ -53,6 +53,10 @@ struct Params {
     int BCXPowLimitWindow;
     CAmount BCXPremineAmount;
     int BCXPremineBlocks;
+
+    /** Block height at which bcx contract fork becomes active */
+    int BCXContractHeight;
+    
     /**
      * Minimum blocks including miner confirmation of the total of 2016 blocks in a retargeting period,
      * (nPowTargetTimespan / nPowTargetSpacing) which is also used for BIP9 deployments.

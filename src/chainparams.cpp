@@ -14,6 +14,11 @@
 #include "chainparamsseeds.h"
 #include "amount.h"
 
+#include <libdevcore/SHA3.h>
+#include <libdevcore/RLP.h>
+#include "arith_uint256.h"
+
+
 static CBlock CreateGenesisBlock(const char* pszTimestamp, const CScript& genesisOutputScript, uint32_t nTime, uint32_t nNonce, uint32_t nBits, int32_t nVersion, const CAmount& genesisReward)
 {
     CMutableTransaction txNew;
@@ -32,6 +37,9 @@ static CBlock CreateGenesisBlock(const char* pszTimestamp, const CScript& genesi
     genesis.vtx.push_back(MakeTransactionRef(std::move(txNew)));
     genesis.hashPrevBlock.SetNull();
     genesis.hashMerkleRoot = BlockMerkleRoot(genesis);
+
+    genesis.hashStateRoot = h256Touint(dev::sha3(dev::rlp("")));
+    genesis.hashUTXORoot = h256Touint(dev::sha3(dev::rlp("")));
     return genesis;
 }
 
@@ -118,6 +126,7 @@ public:
         consensus.BCXPowLimitWindow = 800;
         consensus.BCXPremineAmount = 105 * 10000 * COIN * BTC_2_BCX_RATE;
         consensus.BCXPremineBlocks = 420000;
+        consensus.BCXContractHeight = 698889;
         consensus.powLimit = uint256S("00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
         consensus.powLimitBCXStart = uint256S("00000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
         consensus.nPowTargetTimespan = 14 * 24 * 60 * 60; // two weeks
@@ -233,6 +242,7 @@ public:
         consensus.BCXPowLimitWindow = 800;
         consensus.BCXPremineAmount = 105 * COIN * BTC_2_BCX_RATE;
         consensus.BCXPremineBlocks = 336;
+        consensus.BCXContractHeight = 1354701;
         consensus.powLimit = uint256S("00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
         consensus.powLimitBCXStart = uint256S("00000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
         consensus.nPowTargetTimespan = 14 * 24 * 60 * 60; // two weeks
@@ -329,10 +339,11 @@ public:
         consensus.BIP34Hash = uint256();
         consensus.BIP65Height = 1351; // BIP65 activated on regtest (Used in rpc activation tests)
         consensus.BIP66Height = 1251; // BIP66 activated on regtest (Used in rpc activation tests)
-        consensus.BCXHeight = 1888;
+        consensus.BCXHeight = 1;
         consensus.BCXPowLimitWindow = 0;
         consensus.BCXPremineAmount = 0;
         consensus.BCXPremineBlocks = 0;
+        consensus.BCXContractHeight = 105;
         consensus.powLimit = uint256S("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
         consensus.powLimitBCXStart = uint256S("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
         consensus.nPowTargetTimespan = 14 * 24 * 60 * 60; // two weeks

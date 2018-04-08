@@ -24,6 +24,11 @@
 
 #include <memory>
 
+#include <boost/filesystem.hpp>
+#include <libethashseal/Ethash.h>
+#include "contract/ethstate.h"
+#include "contract/txexecrecord.h"
+
 void CConnmanTest::AddNode(CNode& node)
 {
     LOCK(g_connman->cs_vNodes);
@@ -83,6 +88,19 @@ TestingSetup::TestingSetup(const std::string& chainName) : BasicTestingSetup(cha
         pblocktree = new CBlockTreeDB(1 << 20, true);
         pcoinsdbview = new CCoinsViewDB(1 << 23, true);
         pcoinsTip = new CCoinsViewCache(pcoinsdbview);
+
+        // contract
+        dev::eth::Ethash::init();		
+        boost::filesystem::create_directories(pathTemp);
+        const dev::h256 hashDB(dev::sha3(dev::rlp("")));
+        EthState::Init(dev::u256(0), EthState::openDB(pathTemp.string(), hashDB, dev::WithExisting::Trust), pathTemp.string(), dev::eth::BaseState::Empty);
+        EthState::Instance()->setRoot(uintToh256(chainparams.GenesisBlock().hashStateRoot));
+        EthState::Instance()->setRootUTXO(uintToh256(chainparams.GenesisBlock().hashUTXORoot));
+        EthState::Instance()->populateFromGenesis();
+        EthState::Instance()->db().commit();
+        EthState::Instance()->dbUtxo().commit();
+        TxExecRecord::Init(pathTemp.string());
+
         if (!LoadGenesisBlock(chainparams)) {
             throw std::runtime_error("LoadGenesisBlock failed.");
         }
@@ -112,6 +130,10 @@ TestingSetup::~TestingSetup()
         delete pcoinsTip;
         delete pcoinsdbview;
         delete pblocktree;
+
+        EthState::Instance()->Release();
+        TxExecRecord::Instance()->Release();
+
         fs::remove_all(pathTemp);
 }
 

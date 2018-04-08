@@ -1565,6 +1565,9 @@ UniValue getchaintxstats(const JSONRPCRequest& request)
     return ret;
 }
 
+// in contract/rpc.cpp
+extern UniValue callcontract(const JSONRPCRequest& request);
+
 static const CRPCCommand commands[] =
 { //  category              name                      actor (function)         okSafe argNames
   //  --------------------- ------------------------  -----------------------  ------ ----------
@@ -1588,6 +1591,8 @@ static const CRPCCommand commands[] =
     { "blockchain",         "verifychain",            &verifychain,            true,  {"checklevel","nblocks"} },
 
     { "blockchain",         "preciousblock",          &preciousblock,          true,  {"blockhash"} },
+
+    { "contract",           "callcontract",           &callcontract,           true,  {"address","data"} },
 
     /* Not shown in help */
     { "hidden",             "invalidateblock",        &invalidateblock,        true,  {"blockhash"} },
