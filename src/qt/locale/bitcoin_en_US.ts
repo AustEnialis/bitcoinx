@@ -41,6 +41,14 @@
         <source>&amp;Delete</source>
         <translation>&amp;Delete</translation>
     </message>
+    <message>
+        <source>Choose the address to send coins to</source>
+        <translation>选择你要发送币的目的地址</translation>
+    </message>
+    <message>
+        <source>Choose the address to receive coins with</source>
+        <translation>选择接收币的地址</translation>
+    </message>
     </context>
 <context>
     <name>AddressTableModel</name>
@@ -168,8 +176,16 @@
     </context>
 <context>
     <name>WalletView</name>
+    <message>
+        <source>&amp;Export</source>
+        <translation>&amp;Export</translation>
+    </message>
+    <message>
+        <source>Export the data in the current tab to a file</source>
+        <translation>Export the data in the current tab to a file</translation>
+    </message>
     </context>
 <context>
-    <name>bitcoinx-core</name>
+    <name>bitcoin-core</name>
     </context>
 </TS>

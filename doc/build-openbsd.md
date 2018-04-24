@@ -90,13 +90,13 @@ Make sure `BDB_PREFIX` is set to the appropriate path from the above steps.
 
 To configure with wallet:
 ```bash
-./configure --with-gui=no CC=egcc CXX=eg++ CPP=ecpp \
+./configure --with-gui=no CC=cc CXX=c++ \
     BDB_LIBS="-L${BDB_PREFIX}/lib -ldb_cxx-4.8" BDB_CFLAGS="-I${BDB_PREFIX}/include"
 ```
 
 To configure without wallet:
 ```bash
-./configure --disable-wallet --with-gui=no CC=egcc CXX=eg++ CPP=ecpp
+./configure --disable-wallet --with-gui=no CC=cc CXX=c++
 ```
 
 Build and run the tests:
@@ -105,13 +105,23 @@ gmake # use -jX here for parallelism
 gmake check
 ```
 
-Clang
-------------------------------
+Resource limits
+-------------------
 
-```bash
-pkg_add llvm
+If the build runs into out-of-memory errors, the instructions in this section
+might help.
 
-./configure --disable-wallet --with-gui=no CC=clang CXX=clang++
-gmake # use -jX here for parallelism
-gmake check
-```
+The standard ulimit restrictions in OpenBSD are very strict:
+
+    data(kbytes)         1572864
+
+This, unfortunately, in some cases not enough to compile some `.cpp` files in the project,
+(see issue [#6658](https://github.com/bitcoin/bitcoin/issues/6658)).
+If your user is in the `staff` group the limit can be raised with:
+
+    ulimit -d 3000000
+
+The change will only affect the current shell and processes spawned by it. To
+make the change system-wide, change `datasize-cur` and `datasize-max` in
+`/etc/login.conf`, and reboot.
+

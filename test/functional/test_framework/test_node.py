@@ -10,16 +10,21 @@ import http.client
 import json
 import logging
 import os
+import re
 import subprocess
 import time
 
+from .authproxy import JSONRPCException
 from .util import (
     assert_equal,
     get_rpc_proxy,
     rpc_url,
     wait_until,
+    p2p_port,
 )
-from .authproxy import JSONRPCException
+
+# For Python 3.4 compatibility
+JSONDecodeError = getattr(json, "JSONDecodeError", ValueError)
 
 BITCOIND_PROC_WAIT_TIMEOUT = 60
 
@@ -31,11 +36,13 @@ class TestNode():
     - state about the node (whether it's running, etc)
     - a Python subprocess.Popen object representing the running process
     - an RPC connection to the node
+    - one or more P2P connections to the node
 
-    To make things easier for the test writer, a bit of magic is happening under the covers.
-    Any unrecognised messages will be dispatched to the RPC connection."""
 
-    def __init__(self, i, dirname, extra_args, rpchost, timewait, binary, stderr, mocktime, coverage_dir):
+    To make things easier for the test writer, any unrecognised messages will
+    be dispatched to the RPC connection."""
+
+    def __init__(self, i, dirname, extra_args, rpchost, timewait, binary, stderr, mocktime, coverage_dir, use_cli=False):
         self.index = i
         self.datadir = os.path.join(dirname, "node" + str(i))
         self.rpchost = rpchost
@@ -119,6 +126,7 @@ class TestNode():
             self.stop()
         except http.client.CannotSendRequest:
             self.log.exception("Unable to stop node.")
+        del self.p2ps[:]
 
     def is_node_stopped(self):
         """Checks whether the node has stopped.

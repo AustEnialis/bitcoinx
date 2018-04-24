@@ -1,32 +1,32 @@
-// Copyright (c) 2012-2015 The Bitcoin Core developers
+// Copyright (c) 2012-2017 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include "key.h"
+#include <key.h>
 
-#include "base58.h"
-#include "script/script.h"
-#include "uint256.h"
-#include "util.h"
-#include "utilstrencodings.h"
-#include "test/test_bitcoin.h"
+#include <base58.h>
+#include <script/script.h>
+#include <uint256.h>
+#include <util.h>
+#include <utilstrencodings.h>
+#include <test/test_bitcoin.h>
 
 #include <string>
 #include <vector>
 
 #include <boost/test/unit_test.hpp>
 
-static const std::string strSecret1     ("5Jht8Z9GZZoVsnDpfmEV8pTsZtYEFrugLeuAbQhxq8DkycoZTxw");
-static const std::string strSecret2     ("5KUiHdNkmDyxryP6oiL3xDMFZsYzdyzpwVRZhgEfHwfdTg1CbiX");
-static const std::string strSecret1C    ("L19SgLsVgjnET8bbQ6EXBWVcCAUqWbHWdkHFLsdoRQsK6XPzgCT9");
-static const std::string strSecret2C    ("L4ZKEPZ2ACJRZZrYdBR62hWPJ68DQEaEbWTRLYBJ1nHVvFArBJmS");
-static const CBitcoinAddress addr1 ("XVWvyNQbZv9dFCGamQAmsHYe1yfXiP3wga");
-static const CBitcoinAddress addr2 ("XG7yhia4gaxuNrMns1woscR6gaBVFDerp1");
-static const CBitcoinAddress addr1C("XMscbQqY3CBu95q7bmwYDEnq65tv3UgLmf");
-static const CBitcoinAddress addr2C("XC6iKfpU11yNCfCLReR2Bvt6UajdQUHNg1");
+static const std::string strSecret1  = "5Jht8Z9GZZoVsnDpfmEV8pTsZtYEFrugLeuAbQhxq8DkycoZTxw";
+static const std::string strSecret2  = "5KUiHdNkmDyxryP6oiL3xDMFZsYzdyzpwVRZhgEfHwfdTg1CbiX";
+static const std::string strSecret1C = "L19SgLsVgjnET8bbQ6EXBWVcCAUqWbHWdkHFLsdoRQsK6XPzgCT9";
+static const std::string strSecret2C = "L4ZKEPZ2ACJRZZrYdBR62hWPJ68DQEaEbWTRLYBJ1nHVvFArBJmS";
+static const std::string addr1  = "XVWvyNQbZv9dFCGamQAmsHYe1yfXiP3wga";
+static const std::string addr2  = "XG7yhia4gaxuNrMns1woscR6gaBVFDerp1";
+static const std::string addr1C = "XMscbQqY3CBu95q7bmwYDEnq65tv3UgLmf";
+static const std::string addr2C = "XC6iKfpU11yNCfCLReR2Bvt6UajdQUHNg1";
 
 
-static const std::string strAddressBad("XZLB2LcVQFxsEL8Fr5zx5MtUU488gJ8EFd");
+static const std::string strAddressBad  = "XZLB2LcVQFxsEL8Fr5zx5MtUU488gJ8EFd";
 
 
 BOOST_FIXTURE_TEST_SUITE(key_tests, BasicTestingSetup)
@@ -74,10 +74,10 @@ BOOST_AUTO_TEST_CASE(key_test1)
     BOOST_CHECK(!key2C.VerifyPubKey(pubkey2));
     BOOST_CHECK(key2C.VerifyPubKey(pubkey2C));
 
-    BOOST_CHECK(addr1.Get()  == CTxDestination(pubkey1.GetID()));
-    BOOST_CHECK(addr2.Get()  == CTxDestination(pubkey2.GetID()));
-    BOOST_CHECK(addr1C.Get() == CTxDestination(pubkey1C.GetID()));
-    BOOST_CHECK(addr2C.Get() == CTxDestination(pubkey2C.GetID()));
+    BOOST_CHECK(DecodeDestination(addr1)  == CTxDestination(pubkey1.GetID()));
+    BOOST_CHECK(DecodeDestination(addr2)  == CTxDestination(pubkey2.GetID()));
+    BOOST_CHECK(DecodeDestination(addr1C) == CTxDestination(pubkey1C.GetID()));
+    BOOST_CHECK(DecodeDestination(addr2C) == CTxDestination(pubkey2C.GetID()));
 
     for (int n=0; n<16; n++)
     {

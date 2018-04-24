@@ -91,7 +91,21 @@ Then build using:
 
 To build executables for Windows 32-bit, install the following dependencies:
 
-    sudo apt-get install g++-mingw-w64-i686 mingw-w64-i686-dev
+    sudo apt install g++-mingw-w64-i686 mingw-w64-i686-dev
+
+For Ubuntu Xenial 16.04, Ubuntu Zesty 17.04 and Windows Subsystem for Linux <sup>[2](#footnote2)</sup>:
+
+    sudo update-alternatives --config i686-w64-mingw32-g++  # Set the default mingw32 g++ compiler option to posix.
+
+Note that for WSL the Bitcoin Core source path MUST be somewhere in the default mount file system, for
+example /usr/src/bitcoin, AND not under /mnt/d/. If this is not the case the dependency autoconf scripts will fail.
+This means you cannot use a directory that located directly on the host Windows file system to perform the build.
+
+The next three steps are an example of how to acquire the source in an appropriate way.
+
+    cd /usr/src
+    sudo git clone https://github.com/bitcoin/bitcoin.git
+    sudo chmod -R a+rw bitcoin
 
 Then build using:
 

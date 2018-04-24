@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Copyright (c) 2010 ArtForz -- public domain half-a-node
 # Copyright (c) 2012 Jeff Garzik
-# Copyright (c) 2010-2016 The Bitcoin Core developers
+# Copyright (c) 2010-2017 The Bitcoin Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Bitcoin P2P network half-a-node.
@@ -1474,107 +1474,89 @@ class NodeConnCB(object):
         # A count of the number of ping messages we've sent to the node
         self.ping_counter = 1
 
-        # deliver_sleep_time is helpful for debugging race conditions in p2p
-        # tests; it causes message delivery to sleep for the specified time
-        # before acquiring the global lock and delivering the next message.
-        self.deliver_sleep_time = None
+        # The network services received from the peer
+        self.nServices = 0
 
-        # Remember the services our peer has advertised
-        self.peer_services = None
+    def peer_connect(self, *args, services=NODE_NETWORK|NODE_WITNESS, send_version=True, **kwargs):
+        super().peer_connect(*args, **kwargs)
+
+        if send_version:
+            # Send a version msg
+            vt = msg_version()
+            vt.nServices = services
+            vt.addrTo.ip = self.dstaddr
+            vt.addrTo.port = self.dstport
+            vt.addrFrom.ip = "0.0.0.0"
+            vt.addrFrom.port = 0
+            self.send_message(vt, True)
 
     # Message receiving methods
 
-    def deliver(self, conn, message):
+    def on_message(self, message):
         """Receive message and dispatch message to appropriate callback.
 
         We keep a count of how many of each message type has been received
-        and the most recent message of each type.
-
-        Optionally waits for deliver_sleep_time before dispatching message.
-        """
-
-        deliver_sleep = self.get_deliver_sleep_time()
-        if deliver_sleep is not None:
-            time.sleep(deliver_sleep)
+        and the most recent message of each type."""
         with mininode_lock:
             try:
                 command = message.command.decode('ascii')
                 self.message_count[command] += 1
                 self.last_message[command] = message
-                getattr(self, 'on_' + command)(conn, message)
+                getattr(self, 'on_' + command)(message)
             except:
-                print("ERROR delivering %s (%s)" % (repr(message),
-                                                    sys.exc_info()[0]))
+                print("ERROR delivering %s (%s)" % (repr(message), sys.exc_info()[0]))
                 raise
-
-    def set_deliver_sleep_time(self, value):
-        with mininode_lock:
-            self.deliver_sleep_time = value
-
-    def get_deliver_sleep_time(self):
-        with mininode_lock:
-            return self.deliver_sleep_time
 
     # Callback methods. Can be overridden by subclasses in individual test
     # cases to provide custom message handling behaviour.
 
-    def on_open(self, conn):
-        self.connected = True
+    def on_open(self):
+        pass
 
-    def on_close(self, conn):
-        self.connected = False
-        self.connection = None
+    def on_close(self):
+        pass
 
-    def on_addr(self, conn, message): pass
-    def on_alert(self, conn, message): pass
-    def on_block(self, conn, message): pass
-    def on_blocktxn(self, conn, message): pass
-    def on_cmpctblock(self, conn, message): pass
-    def on_feefilter(self, conn, message): pass
-    def on_getaddr(self, conn, message): pass
-    def on_getblocks(self, conn, message): pass
-    def on_getblocktxn(self, conn, message): pass
-    def on_getdata(self, conn, message): pass
-    def on_getheaders(self, conn, message): pass
-    def on_headers(self, conn, message): pass
-    def on_mempool(self, conn): pass
-    def on_pong(self, conn, message): pass
-    def on_reject(self, conn, message): pass
-    def on_sendcmpct(self, conn, message): pass
-    def on_sendheaders(self, conn, message): pass
-    def on_tx(self, conn, message): pass
+    def on_addr(self, message): pass
+    def on_block(self, message): pass
+    def on_blocktxn(self, message): pass
+    def on_cmpctblock(self, message): pass
+    def on_feefilter(self, message): pass
+    def on_getaddr(self, message): pass
+    def on_getblocks(self, message): pass
+    def on_getblocktxn(self, message): pass
+    def on_getdata(self, message): pass
+    def on_getheaders(self, message): pass
+    def on_headers(self, message): pass
+    def on_mempool(self, message): pass
+    def on_pong(self, message): pass
+    def on_reject(self, message): pass
+    def on_sendcmpct(self, message): pass
+    def on_sendheaders(self, message): pass
+    def on_tx(self, message): pass
 
-    def on_inv(self, conn, message):
+    def on_inv(self, message):
         want = msg_getdata()
         for i in message.inv:
             if i.type != 0:
                 want.inv.append(i)
         if len(want.inv):
-            conn.send_message(want)
+            self.send_message(want)
 
-    def on_ping(self, conn, message):
-        if conn.ver_send > BIP0031_VERSION:
-            conn.send_message(msg_pong(message.nonce))
+    def on_ping(self, message):
+        self.send_message(msg_pong(message.nonce))
 
-    def on_verack(self, conn, message):
-        conn.ver_recv = conn.ver_send
+    def on_verack(self, message):
         self.verack_received = True
 
-    def on_version(self, conn, message):
-        if message.nVersion >= 209:
-            conn.send_message(msg_verack())
-        conn.ver_send = min(MY_VERSION, message.nVersion)
-        if message.nVersion < 209:
-            conn.ver_recv = conn.ver_send
-        conn.nServices = message.nServices
+    def on_version(self, message):
+        assert message.nVersion >= MIN_VERSION_SUPPORTED, "Version {} received. Test framework only supports versions greater than {}".format(message.nVersion, MIN_VERSION_SUPPORTED)
+        self.send_message(msg_verack())
+        self.nServices = message.nServices
 
     # Connection helper methods
 
-    def add_connection(self, conn):
-        self.connection = conn
-
     def wait_for_disconnect(self, timeout=60):
-        test_function = lambda: not self.connected
+        test_function = lambda: self.state != "connected"
         wait_until(test_function, timeout=timeout, lock=mininode_lock)
 
     # Message receiving helper methods
@@ -1605,12 +1587,6 @@ class NodeConnCB(object):
         wait_until(test_function, timeout=timeout, lock=mininode_lock)
 
     # Message sending helper functions
-
-    def send_message(self, message):
-        if self.connection:
-            self.connection.send_message(message)
-        else:
-            logger.error("Cannot send message. No connection to node!")
 
     def send_and_ping(self, message):
         self.send_message(message)
@@ -1834,16 +1810,27 @@ class NetworkThread(Thread):
             for fd, obj in mininode_socket_map.items():
                 if obj.disconnect:
                     disconnected.append(obj)
-            [ obj.handle_close() for obj in disconnected ]
+            [obj.handle_close() for obj in disconnected]
             asyncore.loop(0.1, use_poll=True, map=mininode_socket_map, count=1)
         logger.debug("Network thread closing")
 
+def network_thread_start():
+    """Start the network thread."""
+    # Only one network thread may run at a time
+    assert not network_thread_running()
 
-# An exception we can raise if we detect a potential disconnect
-# (p2p or rpc) before the test is complete
-class EarlyDisconnectError(Exception):
-    def __init__(self, value):
-        self.value = value
+    NetworkThread().start()
 
-    def __str__(self):
-        return repr(self.value)
+def network_thread_running():
+    """Return whether the network thread is running."""
+    return any([thread.name == "NetworkThread" for thread in threading.enumerate()])
+
+def network_thread_join(timeout=10):
+    """Wait timeout seconds for the network thread to terminate.
+
+    Throw if the network thread doesn't terminate in timeout seconds."""
+    network_threads = [thread for thread in threading.enumerate() if thread.name == "NetworkThread"]
+    assert len(network_threads) <= 1
+    for thread in network_threads:
+        thread.join(timeout)
+        assert not thread.is_alive()
