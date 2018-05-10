@@ -174,7 +174,7 @@ private:
     EthState* mState;
     const std::vector<TransferInfo>& mTransfers;
     const EthTransaction& mTransaction;
-    const std::set<dev::Address>& mDeletionAddresses;
+    const std::set<dev::Address> mDeletionAddresses;
 
     std::map<dev::Address, Vin> mVins;
     std::map<dev::Address, BalanceChange> mBalanceChanges;

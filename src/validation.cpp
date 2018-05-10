@@ -2159,8 +2159,9 @@ static bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockInd
                 }
 
                 for (const EthExecutionResult& r : ethExeResult) {
-                    if (r.execRes.newAddress != dev::Address() && !fJustCheck)
-                        dev::g_logPost(std::string("Address : " + r.execRes.newAddress.hex()), NULL);
+                    if (r.execRes.newAddress != dev::Address() && !fJustCheck) {
+                        LogPrintf("ConnectBlock(): contract %s\n", r.execRes.newAddress.hex());
+                    }
                 }
             }
         }
