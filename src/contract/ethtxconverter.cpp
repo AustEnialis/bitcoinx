@@ -1,5 +1,6 @@
 #include "ethtxconverter.h"
 #include "chainparams.h"
+#include "config.h"
 #include "pubkey.h"
 #include "script/interpreter.h"
 #include "script/standard.h"
@@ -54,7 +55,7 @@ bool EthTxConverter::parseEthTxParams(EthTransactionParams& params)
             stack.pop_back();
             receiveAddress = dev::Address(vecAddr);
         }
-        
+
         if (stack.size() < 4) {
             return false;
         }
@@ -143,9 +144,9 @@ EthTransaction EthTxConverter::createEthTx(const EthTransactionParams& params, u
 {
     EthTransaction txEth;
     if (params.receiveAddress == dev::Address() && opcode != OP_SENDTOCONTRACT) {
-        txEth = EthTransaction(txBit.vout[idx].nValue, params.gasPrice, params.gasLimit, params.code, dev::u256(0));
+        txEth = EthTransaction(txBit.vout[idx].nValue * BCX_2_GAS_RATE, params.gasPrice, params.gasLimit, params.code, dev::u256(0));
     } else {
-        txEth = EthTransaction(txBit.vout[idx].nValue, params.gasPrice, params.gasLimit, params.receiveAddress, params.code, dev::u256(0));
+        txEth = EthTransaction(txBit.vout[idx].nValue * BCX_2_GAS_RATE, params.gasPrice, params.gasLimit, params.receiveAddress, params.code, dev::u256(0));
     }
     dev::Address sender(GetSenderAddress(txBit, view, blockTransactions));
     txEth.forceSender(sender);

@@ -75,7 +75,7 @@ private:
                     mVins[ti.from] = Vin{
                         mTransaction.GetHashWith(),
                         mTransaction.GetOutIdx(),
-                        mTransaction.value() * BCX_2_GAS_RATE,
+                        mTransaction.value(),
                         1,
                     };
                 } else if (const auto a = mState->vin(ti.from)) {
@@ -272,7 +272,7 @@ EthExecutionResult EthState::execute(EnvInfo const& _envInfo, EthTransaction con
 {
     assert(_t.GetParams().version == EthTxVersion::GetDefault());
 
-    addBalance(_t.sender(), (_t.value() * BCX_2_GAS_RATE) + (_t.gas() * _t.gasPrice()));
+    addBalance(_t.sender(), _t.value() + (_t.gas() * _t.gasPrice()));
 
     if (_t.isCreation()) {
         mNewAddress = ContractUtil::createContractAddr(h256Touint(_t.GetHashWith()), _t.GetOutIdx());
@@ -381,7 +381,7 @@ EthExecutionResult EthState::execute(EnvInfo const& _envInfo, EthTransaction con
         // Note, if sender was a non-standard tx, this will send the coins to pubkeyhash 0x00,
         // effectively destroying the coins
         CScript script(CScript() << OP_DUP << OP_HASH160 << _t.sender().asBytes() << OP_EQUALVERIFY << OP_CHECKSIG);
-        refundTx.vout.push_back(CTxOut(CAmount(_t.value().convert_to<uint64_t>()), script));
+        refundTx.vout.push_back(CTxOut(CAmount(_t.value().convert_to<uint64_t>() / BCX_2_GAS_RATE), script));
     }
     // Make sure to use empty transaction if no vouts made
     return EthExecutionResult{
