@@ -310,9 +310,6 @@ void PruneBlockFilesManual(int nManualPruneHeight);
 /** Check is bcx hardfork has activated. */
 bool IsHardForkEnabled(int nHeight, const Consensus::Params& params);
 
-/** Check is bcx contract hardfork has activated. */
-bool IsContractHardForkEnabled(int nHeight, const Consensus::Params& params);
-
 /** (try to) add transaction to memory pool
  * plTxnReplaced will be appended to with all transactions replaced from mempool **/
 bool AcceptToMemoryPool(CTxMemPool& pool, CValidationState &state, const CTransactionRef &tx, bool fLimitFree,
@@ -420,6 +417,9 @@ bool TestBlockValidity(CValidationState& state, const CChainParams& chainparams,
 
 /** Check whether witness commitments are required for block. */
 bool IsWitnessEnabled(const CBlockIndex* pindexPrev, const Consensus::Params& params);
+
+/** Check whether contract are enabled for block */
+bool IsContractEnabled(const CBlockIndex* pindexPrev, const Consensus::Params& params);
 
 /** When there are blocks in the active chain with missing data, rewind the chainstate and remove them from the block index */
 bool RewindBlockIndex(const CChainParams& params);

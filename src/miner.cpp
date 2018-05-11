@@ -284,7 +284,7 @@ void BlockAssembler::AddToBlock(CTxMemPool::txiter iter)
 bool BlockAssembler::TryToAddContractToBlock(CTxMemPool::txiter iter, uint64_t minGasPrice)
 {
     // Check contract active.
-    if (!IsContractHardForkEnabled(nHeight, chainparams.GetConsensus())) {
+    if (!IsContractEnabled(chainActive.Tip(), chainparams.GetConsensus())) {
         return false;
     }
 

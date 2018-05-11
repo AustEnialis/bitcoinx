@@ -67,6 +67,7 @@
 #endif
 
 #include <libethashseal/Ethash.h>
+#include "contract/contract.h"
 #include "contract/ethstate.h"
 #include "contract/txexecrecord.h"
 #include "contract/vmlog.h"
@@ -251,6 +252,7 @@ void Shutdown()
         pcoinsdbview = nullptr;
         delete pblocktree;
         pblocktree = nullptr;
+        Contract::SetEnabled(false);
         EthState::Release();
         TxExecRecord::Release();
     }
@@ -1434,6 +1436,7 @@ bool AppInitMain(boost::thread_group& threadGroup, CScheduler& scheduler)
                 delete pcoinsdbview;
                 delete pcoinscatcher;
                 delete pblocktree;
+                Contract::SetEnabled(false);
                 EthState::Release();
                 TxExecRecord::Release();
 
@@ -1545,7 +1548,7 @@ bool AppInitMain(boost::thread_group& threadGroup, CScheduler& scheduler)
                 }
 
                 // contract state
-                if (chainActive.Tip() != nullptr && CBlockHeader::CheckBCXContractVersion(chainActive.Tip()->nVersion)) {
+                if (chainActive.Tip() != nullptr && IsContractEnabled(chainActive.Tip()->pprev, chainparams.GetConsensus())) {
                     EthState::Instance()->setRoot(uintToh256(chainActive.Tip()->hashStateRoot));
                     EthState::Instance()->setRootUTXO(uintToh256(chainActive.Tip()->hashUTXORoot));
                 } else {
@@ -1555,6 +1558,8 @@ bool AppInitMain(boost::thread_group& threadGroup, CScheduler& scheduler)
                 }
                 EthState::Instance()->db().commit();
                 EthState::Instance()->dbUtxo().commit();
+
+                Contract::SetEnabled(IsContractEnabled(chainActive.Tip(), chainparams.GetConsensus()));
 
                 if (!fReset) {
                     // Note that RewindBlockIndex MUST run even if we're about to -reindex-chainstate.

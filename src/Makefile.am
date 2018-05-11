@@ -316,6 +316,8 @@ libbitcoin_consensus_a_SOURCES = \
   consensus/merkle.h \
   consensus/params.h \
   consensus/validation.h \
+  contract/contract.cpp \
+  contract/contract.h \
   hash.cpp \
   hash.h \
   hash_blake2.cpp \

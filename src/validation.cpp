@@ -50,6 +50,7 @@
 #include <boost/thread.hpp>
 
 #include "contract/config.h"
+#include "contract/contract.h"
 #include "contract/ethtxversion.h"
 #include "contract/ethtransaction.h"
 #include "contract/ethstate.h"
@@ -398,11 +399,6 @@ static bool IsHardForkEnabled(const CBlockIndex* pindex, const Consensus::Params
     return IsHardForkEnabled(pindex->nHeight, params);
 }
 
-bool IsContractHardForkEnabled(int nHeight, const Consensus::Params& params)
-{
-    return nHeight >= params.BCXContractHeight;
-}
-
 /* Make mempool consistent after a reorg, by re-adding or recursively erasing
  * disconnected block transactions from the mempool, and also removing any
  * other transactions from the mempool that are no longer valid given the new
@@ -661,7 +657,7 @@ static bool AcceptToMemoryPoolWorker(const CChainParams& chainparams, CTxMemPool
         CAmount nFees = nValueIn-nValueOut;
         dev::u256 txMinGasPrice = 0;
         if (tx.HasCreateOrSendOp()) {
-            if (!IsContractHardForkEnabled(chainActive.Tip()->nHeight + 1, chainparams.GetConsensus())) {
+            if (!IsContractEnabled(chainActive.Tip(), chainparams.GetConsensus())) {
                 return state.DoS(100, false, REJECT_INVALID, "bad-txns-non-active-contract");
             }
 
@@ -1697,7 +1693,7 @@ static DisconnectResult DisconnectBlock(const CBlock& block, const CBlockIndex* 
     // move best block pointer to prevout block
     view.SetBestBlock(pindex->pprev->GetBlockHash());
 
-    if (CBlockHeader::CheckBCXContractVersion(pindex->pprev->nVersion)) {
+    if (IsContractEnabled(pindex->pprev->pprev, Params().GetConsensus())) {
         EthState::Instance()->setRoot(uintToh256(pindex->pprev->hashStateRoot));
         EthState::Instance()->setRootUTXO(uintToh256(pindex->pprev->hashUTXORoot));
     } else {
@@ -1755,13 +1751,13 @@ int32_t ComputeBlockVersion(const CBlockIndex* pindexPrev, const Consensus::Para
     if (pindexPrev != nullptr && IsHardForkEnabled(pindexPrev->nHeight + 1, params)) {
         nVersion |= VERSIONBITS_BCX_MASK;
 
-        if (IsContractHardForkEnabled(pindexPrev->nHeight + 1, params)) {
+        if (IsContractEnabled(pindexPrev, params)) {
             nVersion |= VERSIONBITS_BCX_CONTRACT_BITS;
         }
     }
 
     for (int i = 0; i < (int)Consensus::MAX_VERSION_BITS_DEPLOYMENTS; i++) {
-        ThresholdState state = VersionBitsState(pindexPrev, params, (Consensus::DeploymentPos)i, versionbitscache);
+        const ThresholdState state = VersionBitsState(pindexPrev, params, (Consensus::DeploymentPos)i, versionbitscache);
         if (state == THRESHOLD_LOCKED_IN || state == THRESHOLD_STARTED) {
             nVersion |= VersionBitsMask(params, (Consensus::DeploymentPos)i);
         }
@@ -2454,7 +2450,7 @@ void static UpdateTip(CBlockIndex *pindexNew, const CChainParams& chainParams) {
         const CBlockIndex* pindex = chainActive.Tip();
         for (int bit = 0; bit < VERSIONBITS_NUM_BITS; bit++) {
             WarningBitsConditionChecker checker(bit);
-            ThresholdState state = checker.GetStateFor(pindex, chainParams.GetConsensus(), warningcache[bit]);
+            const ThresholdState state = checker.GetStateFor(pindex, chainParams.GetConsensus(), warningcache[bit]);
             if (state == THRESHOLD_ACTIVE || state == THRESHOLD_LOCKED_IN) {
                 const std::string strWarning = strprintf(_("Warning: unknown new rules activated (versionbit %i)"), bit);
                 if (state == THRESHOLD_ACTIVE) {
@@ -2481,6 +2477,10 @@ void static UpdateTip(CBlockIndex *pindexNew, const CChainParams& chainParams) {
             DoWarning(strWarning);
         }
     }
+
+    // Update contract enabled
+    Contract::SetEnabled(IsContractEnabled(pindexNew, chainParams.GetConsensus()));
+
     LogPrintf("%s: new best=%s height=%d version=0x%08x log2_work=%.8g tx=%lu date='%s' progress=%f cache=%.1fMiB(%utxo)", __func__,
       chainActive.Tip()->GetBlockHash().ToString(), chainActive.Height(), chainActive.Tip()->nVersion,
       log(chainActive.Tip()->nChainWork.getdouble())/log(2.0), (unsigned long)chainActive.Tip()->nChainTx,
@@ -3293,6 +3293,7 @@ bool CheckBlock(const CBlock& block, CValidationState& state, const Consensus::P
     }
 
     // Check transactions
+    const bool bContractEnabled = block.CheckBCXContractVersion();
     bool fLastIsContractTx = false;
     for (const auto& tx : block.vtx) {
         if (!CheckTransaction(*tx, state, false)) {
@@ -3310,7 +3311,7 @@ bool CheckBlock(const CBlock& block, CValidationState& state, const Consensus::P
 
         // Check contract transactions
         if (tx->HasCreateOrSendOp() || tx->HasSpendOp()) {
-            if (!block.CheckBCXContractVersion()) {
+            if (!bContractEnabled) {
                 return state.DoS(100, false, REJECT_INVALID, "bad-txns-non-active-contract", false, "non-active contract transaction");
             }
             fLastIsContractTx = true;
@@ -3336,7 +3337,13 @@ bool CheckBlock(const CBlock& block, CValidationState& state, const Consensus::P
 bool IsWitnessEnabled(const CBlockIndex* pindexPrev, const Consensus::Params& params)
 {
     LOCK(cs_main);
-    return (IsVersionBitsActive(pindexPrev, params, Consensus::DEPLOYMENT_SEGWIT, versionbitscache));
+    return IsVersionBitsActive(pindexPrev, params, Consensus::DEPLOYMENT_SEGWIT, versionbitscache);
+}
+
+bool IsContractEnabled(const CBlockIndex* pindexPrev, const Consensus::Params& params)
+{
+    LOCK(cs_main);
+    return IsVersionBitsActive(pindexPrev, params, Consensus::DEPLOYMENT_CONTRACT, versionbitscache);
 }
 
 // Compute at which vout of the block's coinbase transaction the witness
@@ -3410,9 +3417,13 @@ static bool ContextualCheckBlockHeader(const CBlockHeader& block, CValidationSta
             return state.DoS(100, false, REJECT_INVALID, "bad-block-version-bit", false, "incorrect block hard fork version bit");
         }
 
-        if (IsContractHardForkEnabled(nHeight, consensusParams)) {
+        if (IsContractEnabled(pindexPrev, consensusParams)) {
             if (!block.CheckBCXContractVersion()) {
-                return state.DoS(100, false, REJECT_INVALID, "bad-block-version-bit", false, "incorrect block contract hard fork version bit");
+                return state.DoS(100, false, REJECT_INVALID, "bad-block-version-bit", false, "incorrect block contract version bit");
+            }
+        } else {
+            if (block.CheckBCXContractVersion()) {
+                return state.DoS(100, false, REJECT_INVALID, "bad-block-version-bit", false, "incorrect block contract non-active version bit");
             }
         }
     }
@@ -3464,10 +3475,19 @@ static bool ContextualCheckBlock(const CBlock& block, CValidationState& state, c
                               ? pindexPrev->GetMedianTimePast()
                               : block.GetBlockTime();
 
+    const bool bContractEnabled = IsContractEnabled(pindexPrev, consensusParams);
+
     for (const auto& tx : block.vtx) {
         // Check that all transactions are finalized
         if (!IsFinalTx(*tx, nHeight, nLockTimeCutoff)) {
             return state.DoS(10, false, REJECT_INVALID, "bad-txns-nonfinal", false, "non-final transaction");
+        }
+
+        // Check contract enabled
+        if (tx->HasCreateOrSendOp() || tx->HasSpendOp()) {
+            if (!bContractEnabled) {
+                return state.DoS(100, false, REJECT_INVALID, "bad-txns-non-active-contract", false, "non-active contract transaction");
+            }
         }
     }
 
