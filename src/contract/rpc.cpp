@@ -504,3 +504,103 @@ UniValue sendtocontract(const JSONRPCRequest& request)
 
     return result;
 }
+
+UniValue listcontracts(const JSONRPCRequest& request)
+{
+    if (request.fHelp || request.params.size() > 2)
+        throw std::runtime_error(
+                "listcontracts (start maxDisplay)\n"
+                "\nArgument:\n"
+                "1. start     (numeric or string, optional) The starting account index, default 1\n"
+                "2. maxDisplay       (numeric or string, optional) Max accounts to list, default 20\n"
+        );
+
+    LOCK(cs_main);
+
+    int start=1;
+    if (request.params.size() > 0){
+        start = request.params[0].get_int();
+        if (start<= 0)
+            throw JSONRPCError(RPC_TYPE_ERROR, "Invalid start, min=1");
+    }
+
+    int maxDisplay=20;
+    if (request.params.size() > 1){
+        maxDisplay = request.params[1].get_int();
+        if (maxDisplay <= 0)
+            throw JSONRPCError(RPC_TYPE_ERROR, "Invalid maxDisplay");
+    }
+
+    UniValue result(UniValue::VOBJ);
+
+    const auto &map = EthState::Instance()->addresses();
+    const int contractsCount = (int)map.size();
+
+    if (contractsCount > 0 && start > contractsCount)
+        throw JSONRPCError(RPC_TYPE_ERROR, "start greater than max index "+ itostr(contractsCount));
+
+    const int itStartPos = std::min(start-1,contractsCount);
+    int i = 0;
+    for (auto it = std::next(map.begin(), itStartPos); it != map.end(); it++)
+    {
+        result.push_back(Pair(it->first.hex(), ValueFromAmount(CAmount(EthState::Instance()->balance(it->first) / BCX_2_GAS_RATE))));
+        i++;
+        if (i == maxDisplay) break;
+    }
+
+    return result;
+}
+
+UniValue gethexaddress(const JSONRPCRequest& request) {
+    if (request.fHelp || request.params.size() < 1 || request.params.size() > 1)
+        throw std::runtime_error(
+                "gethexaddress \"address\"\n"
+
+                        "\nConverts a base58 pubkeyhash address to a hex address for use in smart contracts.\n"
+
+                        "\nArguments:\n"
+                        "1. \"address\"      (string, required) The base58 address\n"
+
+                        "\nResult:\n"
+                        "\"hexaddress\"      (string) The raw hex pubkeyhash address for use in smart contracts\n"
+
+                        "\nExamples:\n"
+                + HelpExampleCli("gethexaddress", "\"address\"")
+                + HelpExampleRpc("gethexaddress", "\"address\"")
+        );
+
+    CBitcoinAddress address(request.params[0].get_str());
+    if (!address.IsValid())
+        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid bitcoinx address");
+
+    if(!address.IsPubKeyHash())
+        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Only pubkeyhash addresses are supported");
+
+    return boost::get<CKeyID>(address.Get()).GetReverseHex();
+}
+
+UniValue fromhexaddress(const JSONRPCRequest& request) {
+    if (request.fHelp || request.params.size() < 1 || request.params.size() > 1)
+        throw std::runtime_error(
+                "fromhexaddress \"hexaddress\"\n"
+
+                        "\nConverts a raw hex address to a base58 pubkeyhash address\n"
+
+                        "\nArguments:\n"
+                        "1. \"hexaddress\"      (string, required) The raw hex address\n"
+
+                        "\nResult:\n"
+                        "\"address\"      (string) The base58 pubkeyhash address\n"
+
+                        "\nExamples:\n"
+                + HelpExampleCli("fromhexaddress", "\"hexaddress\"")
+                + HelpExampleRpc("fromhexaddress", "\"hexaddress\"")
+        );
+    if (request.params[0].get_str().size() != 40)
+        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid pubkeyhash hex size (should be 40 hex characters)");
+    CKeyID raw;
+    raw.SetReverseHex(request.params[0].get_str());
+    CBitcoinAddress address(raw);
+
+    return address.ToString();
+}
