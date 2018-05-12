@@ -308,9 +308,9 @@ CScript _createmultisig_redeemScript(CWallet * const pwallet, const UniValue& pa
     }
     CScript result = GetScriptForMultisig(nRequired, pubkeys);
 
-    if (result.size() > MAX_SCRIPT_ELEMENT_SIZE)
+    if (result.size() > ScriptConf::MAX_SCRIPT_ELEMENT_SIZE())
         throw std::runtime_error(
-                strprintf("redeemScript exceeds size limit: %d > %d", result.size(), MAX_SCRIPT_ELEMENT_SIZE));
+                strprintf("redeemScript exceeds size limit: %d > %d", result.size(), ScriptConf::MAX_SCRIPT_ELEMENT_SIZE()));
 
     return result;
 }

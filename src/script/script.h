@@ -19,24 +19,28 @@
 #include <string>
 #include <vector>
 
-// Maximum number of bytes pushable to the stack
-static const unsigned int MAX_SCRIPT_ELEMENT_SIZE = 128000; // (128 kb)
+class ScriptConf
+{
+public:
+    // Maximum script length in bytes
+    static unsigned int MAX_SCRIPT_SIZE();
 
-// Maximum number of non-push operations per script
-static const int MAX_OPS_PER_SCRIPT = 201;
+    // Maximum number of bytes pushable to the stack
+    static unsigned int MAX_SCRIPT_ELEMENT_SIZE();
 
-// Maximum number of public keys per multisig
-static const int MAX_PUBKEYS_PER_MULTISIG = 20;
+    // Maximum number of non-push operations per script
+    static const int MAX_OPS_PER_SCRIPT = 201;
 
-// Maximum script length in bytes
-static const int MAX_SCRIPT_SIZE = 129000; // (129 kb)
+    // Maximum number of public keys per multisig
+    static const int MAX_PUBKEYS_PER_MULTISIG = 20;
 
-// Maximum number of values on script interpreter stack
-static const int MAX_STACK_SIZE = 1000;
+    // Maximum number of values on script interpreter stack
+    static const int MAX_STACK_SIZE = 1000;
 
-// Threshold for nLockTime: below this value it is interpreted as block number,
-// otherwise as UNIX timestamp.
-static const unsigned int LOCKTIME_THRESHOLD = 500000000; // Tue Nov  5 00:53:20 1985 UTC
+    // Threshold for nLockTime: below this value it is interpreted as block number,
+    // otherwise as UNIX timestamp.
+    static const unsigned int LOCKTIME_THRESHOLD = 500000000; // Tue Nov  5 00:53:20 1985 UTC
+};
 
 template <typename T>
 std::vector<unsigned char> ToByteVector(const T& in)
@@ -678,17 +682,33 @@ public:
 
     bool HasCreateContractOp() const
     {
-        return Find(OP_CREATECONTRACT) == 1;
+        if (size() == 0) {
+            return false;
+        }
+
+        if (*begin() == OP_RETURN) {
+            return false;
+        }
+
+        return (*rbegin() == OP_CREATECONTRACT) && (Find(OP_CREATECONTRACT) == 1);
     }
     
     bool HasSendToContractOp() const
     {
-        return Find(OP_SENDTOCONTRACT) == 1;
+        if (size() == 0) {
+            return false;
+        }
+
+        if (*begin() == OP_RETURN) {
+            return false;
+        }
+
+        return (*rbegin() == OP_SENDTOCONTRACT) && (Find(OP_SENDTOCONTRACT) == 1);
     }
 
     bool HasSpendOp() const
     {
-        return size() == 1 && *begin() == OP_SPEND;
+        return (size() == 1) && (*begin() == OP_SPEND);
     }
 
     /**
@@ -698,7 +718,7 @@ public:
      */
     bool IsUnspendable() const
     {
-        return (size() > 0 && *begin() == OP_RETURN) || (size() > MAX_SCRIPT_SIZE);
+        return (size() > 0 && *begin() == OP_RETURN) || (size() > ScriptConf::MAX_SCRIPT_SIZE());
     }
 
     void clear()
