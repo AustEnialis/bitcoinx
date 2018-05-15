@@ -347,7 +347,7 @@ public:
         consensus.BIP34Hash = uint256();
         consensus.BIP65Height = 1351; // BIP65 activated on regtest (Used in rpc activation tests)
         consensus.BIP66Height = 1251; // BIP66 activated on regtest (Used in rpc activation tests)
-        consensus.BCXHeight = 1;
+        consensus.BCXHeight = 1888;
         consensus.BCXPowLimitWindow = 0;
         consensus.BCXPremineAmount = 0;
         consensus.BCXPremineBlocks = 0;
