@@ -185,13 +185,14 @@ bool Solver(const CScript& scriptPubKey, txnouttype& typeRet, std::vector<std::v
             {
                 if(0 <= opcode1 && opcode1 <= OP_PUSHDATA4)
                 {
-                    if(vch1.empty() || vch1.size() > 4 || (vch1.back() & 0x80))
-                        return false;
+                    if(vch1.empty() || vch1.size() > 4 || (vch1.back() & 0x80)) {
+                        break;
+                    }
 
                     version = EthTxVersion::FromRaw(CScriptNum::vch_to_uint64(vch1));
                     if(!(version == EthTxVersion::GetDefault() || version == EthTxVersion::GetNoExec())){
                         // only allow standard EVM and no-exec transactions to live in mempool
-                        return false;
+                        break;
                     }
                 }
             } else if(opcode2 == OP_GAS_LIMIT) {
@@ -200,28 +201,26 @@ bool Solver(const CScript& scriptPubKey, txnouttype& typeRet, std::vector<std::v
                     if(fContractConsensus) {
                         // consensus rules (this is checked more in depth later)
                         if (version != EthTxVersion::GetNoExec() && val < 1) {
-                            return false;
+                            break;
                         }
                         if (val > MAX_BLOCK_GAS_LIMIT) {
                             // do not allow transactions that could use more gas than is in a block
-                            return false;
+                            break;
                         }
                     }else{
                         // standard mempool rules for contracts
                         // consensus rules for contracts
                         if (version != EthTxVersion::GetNoExec() && val < STANDARD_MINIMUM_GAS_LIMIT) {
-                            return false;
+                            break;
                         }
 
                         if (val > DEFAULT_BLOCK_GAS_LIMIT / 2) {
                             // don't allow transactions that use more than 1/2 block of gas to be broadcast on the mempool
-                            return false;
+                            break;
                         }
-
                     }
-                }
-                catch (const scriptnum_error &err) {
-                    return false;
+                } catch (const scriptnum_error &err) {
+                    break;
                 }
             } else if(opcode2 == OP_GAS_PRICE) {
                 try {
@@ -229,17 +228,16 @@ bool Solver(const CScript& scriptPubKey, txnouttype& typeRet, std::vector<std::v
                     if(fContractConsensus) {
                         // consensus rules (this is checked more in depth later)
                         if (version != EthTxVersion::GetNoExec() && val < 1) {
-                            return false;
+                            break;
                         }
                     }else{
                         // standard mempool rules
                         if (version != EthTxVersion::GetNoExec() && val < STANDARD_MINIMUM_GAS_PRICE) {
-                            return false;
+                            break;
                         }
                     }
-                }
-                catch (const scriptnum_error &err) {
-                    return false;
+                } catch (const scriptnum_error &err) {
+                    break;
                 }
             }
             else if(opcode2 == OP_DATA)
