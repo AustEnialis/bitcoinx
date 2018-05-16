@@ -82,8 +82,8 @@ std::string VersionBitsStateName(ThresholdState state);
 
 /** What bitmask determines whether bitcoinx hard fork is in use */
 static const int32_t VERSIONBITS_BCX_MASK = 0x12000000UL;
-/** What bits to set in version for bitcoinx contract */
-static const int32_t VERSIONBITS_BCX_CONTRACT_BITS = 0x00800000UL;
+/** What bits to set in version for bitcoinx contract (1 << 2) */
+static const int32_t VERSIONBITS_BCX_CONTRACT_BITS = 0x00000004UL;
 
 
 #endif

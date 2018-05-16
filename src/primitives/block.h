@@ -17,7 +17,8 @@
  * in the block is a special one that creates a new coin owned by the creator
  * of the block.
  */
-class CBlockHeader
+
+class CBaseBlockHeader
 {
 public:
     // header
@@ -28,10 +29,7 @@ public:
     uint32_t nBits;
     uint32_t nNonce;
 
-    uint256 hashStateRoot;
-    uint256 hashUTXORoot;
-
-    CBlockHeader()
+    CBaseBlockHeader()
     {
         SetNull();
     }
@@ -46,11 +44,6 @@ public:
         READWRITE(nTime);
         READWRITE(nBits);
         READWRITE(nNonce);
-
-        if (CheckBCXContractVersion()) {
-            READWRITE(hashStateRoot);
-            READWRITE(hashUTXORoot);
-        }
     }
 
     void SetNull()
@@ -61,8 +54,6 @@ public:
         nTime = 0;
         nBits = 0;
         nNonce = 0;
-        hashStateRoot.SetNull();
-        hashUTXORoot.SetNull();
     }
 
     bool IsNull() const
@@ -70,7 +61,7 @@ public:
         return (nBits == 0);
     }
 
-    uint256 GetHash() const;
+    uint256 GetPoWHash() const;
 
     int64_t GetBlockTime() const
     {
@@ -92,6 +83,39 @@ public:
     static bool CheckBCXContractVersion(int version);
 };
 
+class CBlockHeader : public CBaseBlockHeader
+{
+public:
+    uint256 hashStateRoot;
+    uint256 hashUTXORoot;
+
+    CBlockHeader()
+    {
+        SetNull();
+    }
+
+    ADD_SERIALIZE_METHODS;
+
+    template <typename Stream, typename Operation>
+    inline void SerializationOp(Stream& s, Operation ser_action) {
+        READWRITE(*(CBaseBlockHeader*)this);
+
+        if (CheckBCXContractVersion()) {
+            READWRITE(hashStateRoot);
+            READWRITE(hashUTXORoot);
+        }
+    }
+
+    void SetNull()
+    {
+        CBaseBlockHeader::SetNull();
+
+        hashStateRoot.SetNull();
+        hashUTXORoot.SetNull();
+    }
+
+    uint256 GetHash() const;
+};
 
 class CBlock : public CBlockHeader
 {
