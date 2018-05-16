@@ -149,7 +149,7 @@ public:
         consensus.vDeployments[Consensus::DEPLOYMENT_SEGWIT].nTimeout = 1510704000; // November 15th, 2017.
 
         // Deployment of contract
-        consensus.vDeployments[Consensus::DEPLOYMENT_CONTRACT].bit = 2;
+        consensus.vDeployments[Consensus::DEPLOYMENT_CONTRACT].bit = 2; // i.e. (1 << 2) == VERSIONBITS_BCX_CONTRACT_BITS
         consensus.vDeployments[Consensus::DEPLOYMENT_CONTRACT].nStartTime = 1529539200; // June 21st, 2018.
         consensus.vDeployments[Consensus::DEPLOYMENT_CONTRACT].nTimeout = 1561075200; // June 21st, 2019.
 
@@ -269,7 +269,7 @@ public:
         consensus.vDeployments[Consensus::DEPLOYMENT_SEGWIT].nTimeout = 1493596800; // May 1st 2017
 
         // Deployment of contract
-        consensus.vDeployments[Consensus::DEPLOYMENT_CONTRACT].bit = 2;
+        consensus.vDeployments[Consensus::DEPLOYMENT_CONTRACT].bit = 2; // i.e. (1 << 2) == VERSIONBITS_BCX_CONTRACT_BITS
         consensus.vDeployments[Consensus::DEPLOYMENT_CONTRACT].nStartTime = 1526428800; // May 16th, 2018.
         consensus.vDeployments[Consensus::DEPLOYMENT_CONTRACT].nTimeout = 1557964800; // May 16th, 2019.
 
@@ -347,7 +347,7 @@ public:
         consensus.BIP34Hash = uint256();
         consensus.BIP65Height = 1351; // BIP65 activated on regtest (Used in rpc activation tests)
         consensus.BIP66Height = 1251; // BIP66 activated on regtest (Used in rpc activation tests)
-        consensus.BCXHeight = 1888;
+        consensus.BCXHeight = 432;
         consensus.BCXPowLimitWindow = 0;
         consensus.BCXPremineAmount = 0;
         consensus.BCXPremineBlocks = 0;
@@ -369,7 +369,7 @@ public:
         consensus.vDeployments[Consensus::DEPLOYMENT_SEGWIT].nStartTime = 0;
         consensus.vDeployments[Consensus::DEPLOYMENT_SEGWIT].nTimeout = 999999999999ULL;
         // Deployment of contract
-        consensus.vDeployments[Consensus::DEPLOYMENT_CONTRACT].bit = 2;
+        consensus.vDeployments[Consensus::DEPLOYMENT_CONTRACT].bit = 2; // i.e. (1 << 2) == VERSIONBITS_BCX_CONTRACT_BITS
         consensus.vDeployments[Consensus::DEPLOYMENT_CONTRACT].nStartTime = 0;
         consensus.vDeployments[Consensus::DEPLOYMENT_CONTRACT].nTimeout = 999999999999ULL;
 

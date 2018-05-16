@@ -1153,7 +1153,7 @@ bool ReadBlockFromDisk(CBlock& block, const CDiskBlockPos& pos, const Consensus:
     }
 
     // Check the header
-    if (!CheckProofOfWork(block.GetHash(), block.nBits, consensusParams))
+    if (!CheckProofOfWork(block.GetPoWHash(), block.nBits, consensusParams))
         return error("ReadBlockFromDisk: Errors in block header at %s", pos.ToString());
 
     return true;
@@ -2156,7 +2156,7 @@ static bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockInd
 
                 for (const EthExecutionResult& r : ethExeResult) {
                     if (r.execRes.newAddress != dev::Address() && !fJustCheck) {
-                        LogPrintf("ConnectBlock(): contract %s\n", r.execRes.newAddress.hex());
+                        LogPrintf("ConnectBlock(): txindex=%d, contract=%s\n", i, r.execRes.newAddress.hex());
                     }
                 }
             }
@@ -2481,8 +2481,10 @@ void static UpdateTip(CBlockIndex *pindexNew, const CChainParams& chainParams) {
     // Update contract enabled
     Contract::SetEnabled(IsContractEnabled(pindexNew, chainParams.GetConsensus()));
 
-    LogPrintf("%s: new best=%s height=%d version=0x%08x log2_work=%.8g tx=%lu date='%s' progress=%f cache=%.1fMiB(%utxo)", __func__,
-      chainActive.Tip()->GetBlockHash().ToString(), chainActive.Height(), chainActive.Tip()->nVersion,
+    LogPrintf("%s: new best=%s powhash=%s height=%d version=0x%08x log2_work=%.8g tx=%lu date='%s' progress=%f cache=%.1fMiB(%utxo)", __func__,
+      chainActive.Tip()->GetBlockHash().ToString(),
+      chainActive.Tip()->GetBlockPoWHash().ToString(),
+      chainActive.Height(), chainActive.Tip()->nVersion,
       log(chainActive.Tip()->nChainWork.getdouble())/log(2.0), (unsigned long)chainActive.Tip()->nChainTx,
       DateTimeStrFormat("%Y-%m-%d %H:%M:%S", chainActive.Tip()->GetBlockTime()),
       GuessVerificationProgress(chainParams.TxData(), chainActive.Tip()), pcoinsTip->DynamicMemoryUsage() * (1.0 / (1<<20)), pcoinsTip->GetCacheSize());
@@ -3238,7 +3240,7 @@ static bool FindUndoPos(CValidationState &state, int nFile, CDiskBlockPos &pos, 
 static bool CheckBlockHeader(const CBlockHeader& block, CValidationState& state, const Consensus::Params& consensusParams, bool fCheckPOW = true)
 {
     // Check proof of work matches claimed amount
-    if (fCheckPOW && !CheckProofOfWork(block.GetHash(), block.nBits, consensusParams))
+    if (fCheckPOW && !CheckProofOfWork(block.GetPoWHash(), block.nBits, consensusParams))
         return state.DoS(50, false, REJECT_INVALID, "high-hash", false, "proof of work failed");
 
     return true;
@@ -4138,8 +4140,10 @@ bool LoadChainTip(const CChainParams& chainparams)
 
     PruneBlockIndexCandidates();
 
-    LogPrintf("Loaded best chain: hashBestChain=%s height=%d date=%s progress=%f\n",
-        chainActive.Tip()->GetBlockHash().ToString(), chainActive.Height(),
+    LogPrintf("Loaded best chain: hashBestChain=%s powHashBestChain=%s height=%d date=%s progress=%f\n",
+        chainActive.Tip()->GetBlockHash().ToString(),
+        chainActive.Tip()->GetBlockPoWHash().ToString(),
+        chainActive.Height(),
         DateTimeStrFormat("%Y-%m-%d %H:%M:%S", chainActive.Tip()->GetBlockTime()),
         GuessVerificationProgress(chainparams.TxData(), chainActive.Tip()));
     return true;
