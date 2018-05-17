@@ -56,6 +56,7 @@
 #include "contract/ethstate.h"
 #include "contract/ethtxconverter.h"
 #include "contract/contractexecutor.h"
+#include "contract/staterootview.h"
 #include "contract/txexecrecord.h"
 #include "contract/vmlog.h"
 
@@ -1153,7 +1154,7 @@ bool ReadBlockFromDisk(CBlock& block, const CDiskBlockPos& pos, const Consensus:
     }
 
     // Check the header
-    if (!CheckProofOfWork(block.GetPoWHash(), block.nBits, consensusParams))
+    if (!CheckProofOfWork(block.GetHash(), block.nBits, consensusParams))
         return error("ReadBlockFromDisk: Errors in block header at %s", pos.ToString());
 
     return true;
@@ -1693,13 +1694,21 @@ static DisconnectResult DisconnectBlock(const CBlock& block, const CBlockIndex* 
     // move best block pointer to prevout block
     view.SetBestBlock(pindex->pprev->GetBlockHash());
 
+    dev::h256 stateRootHash;
+    dev::h256 utxoRootHash;
     if (IsContractEnabled(pindex->pprev->pprev, Params().GetConsensus())) {
-        EthState::Instance()->setRoot(uintToh256(pindex->pprev->hashStateRoot));
-        EthState::Instance()->setRootUTXO(uintToh256(pindex->pprev->hashUTXORoot));
+        if (!StateRootView::Instance()->GetRoot(pindex->pprev->GetBlockHash(), stateRootHash, utxoRootHash)) {
+            error("DisconnectBlock(): load state root view failed at height=%d", pindex->pprev->nHeight);
+            return DISCONNECT_FAILED;
+        }
     } else {
-        EthState::Instance()->setRoot(uintToh256(Params().GenesisBlock().hashStateRoot));
-        EthState::Instance()->setRootUTXO(uintToh256(Params().GenesisBlock().hashUTXORoot));
+        if (!StateRootView::Instance()->GetRoot(Params().GenesisBlock().GetHash(), stateRootHash, utxoRootHash)) {
+            error("DisconnectBlock(): load genesis state root view failed");
+            return DISCONNECT_FAILED;
+        }
     }
+    EthState::Instance()->setRoot(stateRootHash);
+    EthState::Instance()->setUTXORoot(utxoRootHash);
 
     if(fLogEvents){
         TxExecRecord::Instance()->Delete(block.vtx);
@@ -1750,10 +1759,6 @@ int32_t ComputeBlockVersion(const CBlockIndex* pindexPrev, const Consensus::Para
 
     if (pindexPrev != nullptr && IsHardForkEnabled(pindexPrev->nHeight + 1, params)) {
         nVersion |= VERSIONBITS_BCX_MASK;
-
-        if (IsContractEnabled(pindexPrev, params)) {
-            nVersion |= VERSIONBITS_BCX_CONTRACT_BITS;
-        }
     }
 
     for (int i = 0; i < (int)Consensus::MAX_VERSION_BITS_DEPLOYMENTS; i++) {
@@ -2187,8 +2192,6 @@ static bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockInd
     LogPrint(BCLog::BENCH, "    - Verify %u txins: %.2fms (%.3fms/txin) [%.2fs]\n", nInputs - 1, 0.001 * (nTime4 - nTime2), nInputs <= 1 ? 0 : 0.001 * (nTime4 - nTime2) / (nInputs-1), nTimeVerify * 0.000001);
 
     checkBlock.hashMerkleRoot = BlockMerkleRoot(checkBlock);
-    checkBlock.hashStateRoot = h256Touint(EthState::Instance()->rootHash());
-    checkBlock.hashUTXORoot = h256Touint(EthState::Instance()->rootHashUTXO());
 
     // If this error happens, it probably means that something with contract-executor created transactions didn't match up to what is expected
     if ((checkBlock.GetHash() != block.GetHash()) && !fJustCheck) {
@@ -2233,28 +2236,14 @@ static bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockInd
                 }
             }
         }
-        if (checkBlock.hashUTXORoot != block.hashUTXORoot) {
-            LogPrintf("Actual block data does not match hashUTXORoot expected by check-block, actual: %s, expected: %s\n",
-                block.hashUTXORoot.ToString(), checkBlock.hashUTXORoot.ToString());
-        }
-        if (checkBlock.hashStateRoot != block.hashStateRoot) {
-            LogPrintf("Actual block data does not match hashStateRoot expected by check-block, actual: %s, expected: %s\n",
-                block.hashStateRoot.ToString(), checkBlock.hashStateRoot.ToString());
-        }
 
-        return state.DoS(100, error("ConnectBlock(): Incorrect contract-executor transactions or hashes (hashStateRoot, hashUTXORoot)"),
-            REJECT_INVALID, "incorrect-transactions-or-hashes-block");
+        return state.DoS(100, error("ConnectBlock(): Incorrect contract-executor transactions"),
+            REJECT_INVALID, "incorrect-contract-executor-transactions");
     }
 
     if (fJustCheck) {
-        dev::h256 prevHashStateRoot(oldHashStateRoot);
-        dev::h256 prevHashUTXORoot(oldHashUTXORoot);
-        if (pindex->pprev->hashStateRoot != uint256() && pindex->pprev->hashUTXORoot != uint256()) {
-            prevHashStateRoot = uintToh256(pindex->pprev->hashStateRoot);
-            prevHashUTXORoot = uintToh256(pindex->pprev->hashUTXORoot);
-        }
-        EthState::Instance()->setRoot(prevHashStateRoot);
-        EthState::Instance()->setRootUTXO(prevHashUTXORoot);
+        EthState::Instance()->setRoot(oldHashStateRoot);
+        EthState::Instance()->setUTXORoot(oldHashUTXORoot);
         return true;
     }
 
@@ -2283,6 +2272,11 @@ static bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockInd
 
     // add this block to the view's block chain
     view.SetBestBlock(pindex->GetBlockHash());
+
+    // store state root view
+    if (IsContractEnabled(pindex->pprev, chainparams.GetConsensus())) {
+        StateRootView::Instance()->SetRoot(pindex->GetBlockHash(), EthState::Instance()->rootHash(), EthState::Instance()->rootHashUTXO());
+    }
 
     int64_t nTime5 = GetTimeMicros(); nTimeIndex += nTime5 - nTime4;
     LogPrint(BCLog::BENCH, "    - Index writing: %.2fms [%.2fs]\n", 0.001 * (nTime5 - nTime4), nTimeIndex * 0.000001);
@@ -2481,9 +2475,8 @@ void static UpdateTip(CBlockIndex *pindexNew, const CChainParams& chainParams) {
     // Update contract enabled
     Contract::SetEnabled(IsContractEnabled(pindexNew, chainParams.GetConsensus()));
 
-    LogPrintf("%s: new best=%s powhash=%s height=%d version=0x%08x log2_work=%.8g tx=%lu date='%s' progress=%f cache=%.1fMiB(%utxo)", __func__,
+    LogPrintf("%s: new best=%s height=%d version=0x%08x log2_work=%.8g tx=%lu date='%s' progress=%f cache=%.1fMiB(%utxo)", __func__,
       chainActive.Tip()->GetBlockHash().ToString(),
-      chainActive.Tip()->GetBlockPoWHash().ToString(),
       chainActive.Height(), chainActive.Tip()->nVersion,
       log(chainActive.Tip()->nChainWork.getdouble())/log(2.0), (unsigned long)chainActive.Tip()->nChainTx,
       DateTimeStrFormat("%Y-%m-%d %H:%M:%S", chainActive.Tip()->GetBlockTime()),
@@ -2658,7 +2651,7 @@ bool static ConnectTip(CValidationState& state, const CChainParams& chainparams,
                 InvalidBlockFound(pindexNew, state);
 
             EthState::Instance()->setRoot(oldHashStateRoot);
-            EthState::Instance()->setRootUTXO(oldHashUTXORoot);
+            EthState::Instance()->setUTXORoot(oldHashUTXORoot);
             TxExecRecord::Instance()->ClearCache();
 
             return error("ConnectTip(): ConnectBlock %s failed", pindexNew->GetBlockHash().ToString());
@@ -3240,7 +3233,7 @@ static bool FindUndoPos(CValidationState &state, int nFile, CDiskBlockPos &pos, 
 static bool CheckBlockHeader(const CBlockHeader& block, CValidationState& state, const Consensus::Params& consensusParams, bool fCheckPOW = true)
 {
     // Check proof of work matches claimed amount
-    if (fCheckPOW && !CheckProofOfWork(block.GetPoWHash(), block.nBits, consensusParams))
+    if (fCheckPOW && !CheckProofOfWork(block.GetHash(), block.nBits, consensusParams))
         return state.DoS(50, false, REJECT_INVALID, "high-hash", false, "proof of work failed");
 
     return true;
@@ -3295,7 +3288,6 @@ bool CheckBlock(const CBlock& block, CValidationState& state, const Consensus::P
     }
 
     // Check transactions
-    const bool bContractEnabled = block.CheckBCXContractVersion();
     bool fLastIsContractTx = false;
     for (const auto& tx : block.vtx) {
         if (!CheckTransaction(*tx, state, false)) {
@@ -3313,9 +3305,6 @@ bool CheckBlock(const CBlock& block, CValidationState& state, const Consensus::P
 
         // Check contract transactions
         if (tx->HasCreateOrSendOp() || tx->HasSpendOp()) {
-            if (!bContractEnabled) {
-                return state.DoS(100, false, REJECT_INVALID, "bad-txns-non-active-contract", false, "non-active contract transaction");
-            }
             fLastIsContractTx = true;
         } else {
             fLastIsContractTx = false;
@@ -3417,16 +3406,6 @@ static bool ContextualCheckBlockHeader(const CBlockHeader& block, CValidationSta
     if (IsHardForkEnabled(nHeight, consensusParams)) {
         if (!block.CheckBCXVersion()) {
             return state.DoS(100, false, REJECT_INVALID, "bad-block-version-bit", false, "incorrect block hard fork version bit");
-        }
-
-        if (IsContractEnabled(pindexPrev, consensusParams)) {
-            if (!block.CheckBCXContractVersion()) {
-                return state.DoS(100, false, REJECT_INVALID, "bad-block-version-bit", false, "incorrect block contract version bit");
-            }
-        } else {
-            if (block.CheckBCXContractVersion()) {
-                return state.DoS(100, false, REJECT_INVALID, "bad-block-version-bit", false, "incorrect block contract non-active version bit");
-            }
         }
     }
 
@@ -3790,7 +3769,7 @@ bool TestBlockValidity(CValidationState& state, const CChainParams& chainparams,
     const dev::h256 oldHashUTXORoot(EthState::Instance()->rootHashUTXO());
     if (!ConnectBlock(block, state, &indexDummy, viewNew, chainparams, true)) {
         EthState::Instance()->setRoot(oldHashStateRoot);
-        EthState::Instance()->setRootUTXO(oldHashUTXORoot);
+        EthState::Instance()->setUTXORoot(oldHashUTXORoot);
         TxExecRecord::Instance()->ClearCache();
         return false;
     }
@@ -4140,9 +4119,8 @@ bool LoadChainTip(const CChainParams& chainparams)
 
     PruneBlockIndexCandidates();
 
-    LogPrintf("Loaded best chain: hashBestChain=%s powHashBestChain=%s height=%d date=%s progress=%f\n",
+    LogPrintf("Loaded best chain: hashBestChain=%s height=%d date=%s progress=%f\n",
         chainActive.Tip()->GetBlockHash().ToString(),
-        chainActive.Tip()->GetBlockPoWHash().ToString(),
         chainActive.Height(),
         DateTimeStrFormat("%Y-%m-%d %H:%M:%S", chainActive.Tip()->GetBlockTime()),
         GuessVerificationProgress(chainparams.TxData(), chainActive.Tip()));
@@ -4252,7 +4230,7 @@ bool CVerifyDB::VerifyDB(const CChainParams& chainparams, CCoinsView *coinsview,
             const dev::h256 oldHashUTXORoot(EthState::Instance()->rootHashUTXO());
             if (!ConnectBlock(block, state, pindex, coins, chainparams)) {
                 EthState::Instance()->setRoot(oldHashStateRoot);
-                EthState::Instance()->setRootUTXO(oldHashUTXORoot);
+                EthState::Instance()->setUTXORoot(oldHashUTXORoot);
                 TxExecRecord::Instance()->ClearCache();
 
                 return error("VerifyDB(): *** found unconnectable block at %d, hash=%s", pindex->nHeight, pindex->GetBlockHash().ToString());
@@ -4260,7 +4238,7 @@ bool CVerifyDB::VerifyDB(const CChainParams& chainparams, CCoinsView *coinsview,
         }
     } else {
         EthState::Instance()->setRoot(oldHashStateRoot);
-        EthState::Instance()->setRootUTXO(oldHashUTXORoot);
+        EthState::Instance()->setUTXORoot(oldHashUTXORoot);
     }
 
     LogPrintf("[DONE].\n");

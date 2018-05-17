@@ -27,6 +27,7 @@
 #include <boost/filesystem.hpp>
 #include <libethashseal/Ethash.h>
 #include "contract/ethstate.h"
+#include "contract/staterootview.h"
 #include "contract/txexecrecord.h"
 
 void CConnmanTest::AddNode(CNode& node)
@@ -90,16 +91,26 @@ TestingSetup::TestingSetup(const std::string& chainName) : BasicTestingSetup(cha
         pcoinsTip = new CCoinsViewCache(pcoinsdbview);
 
         // contract
+        const auto contractPath = pathTemp / "contractstate";
         dev::eth::Ethash::init();		
-        boost::filesystem::create_directories(pathTemp);
+        fs::create_directories(contractPath);
+        StateRootView::Init(contractPath, false);
+        StateRootView::Instance()->InitGenesis(chainparams);
         const dev::h256 hashDB(dev::sha3(dev::rlp("")));
-        EthState::Init(dev::u256(0), EthState::openDB(pathTemp.string(), hashDB, dev::WithExisting::Trust), pathTemp.string(), dev::eth::BaseState::Empty);
-        EthState::Instance()->setRoot(uintToh256(chainparams.GenesisBlock().hashStateRoot));
-        EthState::Instance()->setRootUTXO(uintToh256(chainparams.GenesisBlock().hashUTXORoot));
+        EthState::Init(dev::u256(0), EthState::openDB(contractPath.string(), hashDB, dev::WithExisting::Trust), contractPath.string(), dev::eth::BaseState::Empty);
+
+        dev::h256 stateRoot;
+        dev::h256 utxoRoot;
+        if (!StateRootView::Instance()->GetRoot(chainparams.GenesisBlock().GetHash(), stateRoot, utxoRoot)) {
+            throw std::runtime_error("Load state root view failed.");
+        }
+        EthState::Instance()->setRoot(stateRoot);
+        EthState::Instance()->setUTXORoot(utxoRoot);
         EthState::Instance()->populateFromGenesis();
         EthState::Instance()->db().commit();
         EthState::Instance()->dbUtxo().commit();
-        TxExecRecord::Init(pathTemp.string());
+
+        TxExecRecord::Init(contractPath.string());
 
         if (!LoadGenesisBlock(chainparams)) {
             throw std::runtime_error("LoadGenesisBlock failed.");
@@ -131,8 +142,9 @@ TestingSetup::~TestingSetup()
         delete pcoinsdbview;
         delete pblocktree;
 
-        EthState::Instance()->Release();
-        TxExecRecord::Instance()->Release();
+        EthState::Release();
+        StateRootView::Release();
+        TxExecRecord::Release();
 
         fs::remove_all(pathTemp);
 }
@@ -169,7 +181,7 @@ TestChain100Setup::CreateAndProcessBlock(const std::vector<CMutableTransaction>&
     unsigned int extraNonce = 0;
     IncrementExtraNonce(&block, chainActive.Tip(), extraNonce);
 
-    while (!CheckProofOfWork(block.GetPoWHash(), block.nBits, chainparams.GetConsensus())) ++block.nNonce;
+    while (!CheckProofOfWork(block.GetHash(), block.nBits, chainparams.GetConsensus())) ++block.nNonce;
 
     std::shared_ptr<const CBlock> shared_pblock = std::make_shared<const CBlock>(block);
     ProcessNewBlock(chainparams, shared_pblock, true, nullptr);

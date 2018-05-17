@@ -47,7 +47,7 @@ TxExecRecord::TxExecRecord(std::string const& _path)
     options.create_if_missing = true;
     leveldb::Status status = leveldb::DB::Open(options, path, &db);
     assert(status.ok());
-    LogPrintf("Opened LevelDB successfully\n");
+    LogPrintf("Opened LevelDB in %s successfully\n", path);
 }
 
 TxExecRecord::~TxExecRecord()

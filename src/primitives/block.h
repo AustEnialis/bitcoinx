@@ -18,7 +18,7 @@
  * of the block.
  */
 
-class CBaseBlockHeader
+class CBlockHeader
 {
 public:
     // header
@@ -29,7 +29,7 @@ public:
     uint32_t nBits;
     uint32_t nNonce;
 
-    CBaseBlockHeader()
+    CBlockHeader()
     {
         SetNull();
     }
@@ -61,7 +61,7 @@ public:
         return (nBits == 0);
     }
 
-    uint256 GetPoWHash() const;
+    uint256 GetHash() const;
 
     int64_t GetBlockTime() const
     {
@@ -74,47 +74,6 @@ public:
     }
 
     static bool CheckBCXVersion(int version);
-
-    bool CheckBCXContractVersion() const
-    {
-        return CheckBCXContractVersion(nVersion);
-    }
-
-    static bool CheckBCXContractVersion(int version);
-};
-
-class CBlockHeader : public CBaseBlockHeader
-{
-public:
-    uint256 hashStateRoot;
-    uint256 hashUTXORoot;
-
-    CBlockHeader()
-    {
-        SetNull();
-    }
-
-    ADD_SERIALIZE_METHODS;
-
-    template <typename Stream, typename Operation>
-    inline void SerializationOp(Stream& s, Operation ser_action) {
-        READWRITE(*(CBaseBlockHeader*)this);
-
-        if (CheckBCXContractVersion()) {
-            READWRITE(hashStateRoot);
-            READWRITE(hashUTXORoot);
-        }
-    }
-
-    void SetNull()
-    {
-        CBaseBlockHeader::SetNull();
-
-        hashStateRoot.SetNull();
-        hashUTXORoot.SetNull();
-    }
-
-    uint256 GetHash() const;
 };
 
 class CBlock : public CBlockHeader
@@ -161,8 +120,6 @@ public:
         block.nTime          = nTime;
         block.nBits          = nBits;
         block.nNonce         = nNonce;
-        block.hashStateRoot  = hashStateRoot;
-        block.hashUTXORoot   = hashUTXORoot;
         return block;
     }
 

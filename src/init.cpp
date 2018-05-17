@@ -69,6 +69,7 @@
 #include <libethashseal/Ethash.h>
 #include "contract/contract.h"
 #include "contract/ethstate.h"
+#include "contract/staterootview.h"
 #include "contract/txexecrecord.h"
 #include "contract/vmlog.h"
 
@@ -254,6 +255,7 @@ void Shutdown()
         pblocktree = nullptr;
         Contract::SetEnabled(false);
         EthState::Release();
+        StateRootView::Release();
         TxExecRecord::Release();
     }
 #ifdef ENABLE_WALLET
@@ -1438,6 +1440,7 @@ bool AppInitMain(boost::thread_group& threadGroup, CScheduler& scheduler)
                 delete pblocktree;
                 Contract::SetEnabled(false);
                 EthState::Release();
+                StateRootView::Release();
                 TxExecRecord::Release();
 
                 pblocktree = new CBlockTreeDB(nBlockTreeDBCache, false, fReset);
@@ -1469,12 +1472,13 @@ bool AppInitMain(boost::thread_group& threadGroup, CScheduler& scheduler)
                 // Contract state init
                 dev::eth::Ethash::init();
 
-                const boost::filesystem::path &contractDir = GetDataDir() / "contractstate";
+                const fs::path &contractDir = GetDataDir() / "contractstate";
                 const std::string contractDirStr(contractDir.string());
                 const dev::h256 hashDB(dev::sha3(dev::rlp("")));
-                const bool fStatus = boost::filesystem::exists(contractDir);
+                const bool fStatus = fs::exists(contractDir);
                 const dev::eth::BaseState &contractState = fStatus ? dev::eth::BaseState::PreExisting : dev::eth::BaseState::Empty;
                 EthState::Init(dev::u256(0), EthState::openDB(contractDirStr, hashDB, dev::WithExisting::Trust), contractDirStr, contractState);
+
                 TxExecRecord::Init(contractDirStr);
 
                 fRecordLogOpcodes = gArgs.IsArgSet("-record-log-opcodes");
@@ -1547,15 +1551,33 @@ bool AppInitMain(boost::thread_group& threadGroup, CScheduler& scheduler)
                     assert(chainActive.Tip() != nullptr);
                 }
 
+                StateRootView::Init(contractDir, fReset || fReindexChainState);
+
                 // contract state
+                dev::h256 stateRootHash;
+                dev::h256 utxoRootHash;
                 if (chainActive.Tip() != nullptr && IsContractEnabled(chainActive.Tip()->pprev, chainparams.GetConsensus())) {
-                    EthState::Instance()->setRoot(uintToh256(chainActive.Tip()->hashStateRoot));
-                    EthState::Instance()->setRootUTXO(uintToh256(chainActive.Tip()->hashUTXORoot));
+                    if (!StateRootView::Instance()->GetRoot(chainActive.Tip()->GetBlockHash(), stateRootHash, utxoRootHash)) {
+                        strLoadError = _("Error loading state root view database");
+                        break;
+                    }
                 } else {
-                    EthState::Instance()->setRoot(uintToh256(chainparams.GenesisBlock().hashStateRoot));
-                    EthState::Instance()->setRootUTXO(uintToh256(chainparams.GenesisBlock().hashUTXORoot));
+                    if (!StateRootView::Instance()->GetRoot(chainparams.GenesisBlock().GetHash(), stateRootHash, utxoRootHash)) {
+                        if (!StateRootView::Instance()->InitGenesis(chainparams)) {
+                            strLoadError = _("Error initializing genesis state root view database");
+                            break;
+                        }
+
+                        if (!StateRootView::Instance()->GetRoot(chainparams.GenesisBlock().GetHash(), stateRootHash, utxoRootHash)) {
+                            strLoadError = _("Error loading genesis state root view database");
+                            break;
+                        }
+                    }
                     EthState::Instance()->populateFromGenesis();
                 }
+
+                EthState::Instance()->setRoot(stateRootHash);
+                EthState::Instance()->setUTXORoot(utxoRootHash);
                 EthState::Instance()->db().commit();
                 EthState::Instance()->dbUtxo().commit();
 

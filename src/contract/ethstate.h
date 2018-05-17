@@ -51,7 +51,7 @@ public:
         populateFrom(mParams.genesisState);
     }
 
-    void setRootUTXO(dev::h256 const& _r)
+    void setUTXORoot(dev::h256 const& _r)
     {
         mUTXOCache.clear();
         mUTXOState.setRoot(_r);
@@ -125,13 +125,13 @@ struct TemporaryState {
     void SetRoot(dev::h256 newHashStateRoot, dev::h256 newHashUTXORoot)
     {
         globalStateRef->setRoot(newHashStateRoot);
-        globalStateRef->setRootUTXO(newHashUTXORoot);
+        globalStateRef->setUTXORoot(newHashUTXORoot);
     }
 
     ~TemporaryState()
     {
         globalStateRef->setRoot(oldHashStateRoot);
-        globalStateRef->setRootUTXO(oldHashUTXORoot);
+        globalStateRef->setUTXORoot(oldHashUTXORoot);
     }
     TemporaryState() = delete;
     TemporaryState(const TemporaryState&) = delete;

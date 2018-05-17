@@ -14,10 +14,6 @@
 #include "chainparamsseeds.h"
 #include "amount.h"
 
-#include <libdevcore/SHA3.h>
-#include <libdevcore/RLP.h>
-#include "arith_uint256.h"
-
 
 static CBlock CreateGenesisBlock(const char* pszTimestamp, const CScript& genesisOutputScript, uint32_t nTime, uint32_t nNonce, uint32_t nBits, int32_t nVersion, const CAmount& genesisReward)
 {
@@ -38,8 +34,6 @@ static CBlock CreateGenesisBlock(const char* pszTimestamp, const CScript& genesi
     genesis.hashPrevBlock.SetNull();
     genesis.hashMerkleRoot = BlockMerkleRoot(genesis);
 
-    genesis.hashStateRoot = h256Touint(dev::sha3(dev::rlp("")));
-    genesis.hashUTXORoot = h256Touint(dev::sha3(dev::rlp("")));
     return genesis;
 }
 

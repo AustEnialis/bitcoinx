@@ -233,6 +233,8 @@ libbitcoin_server_a_SOURCES = \
   contract/ethtxconverter.h \
   contract/ethtxversion.h \
   contract/rpc.cpp \
+  contract/staterootview.cpp \
+  contract/staterootview.h \
   contract/txexecrecord.cpp \
   contract/txexecrecord.h \
   contract/vmlog.cpp \

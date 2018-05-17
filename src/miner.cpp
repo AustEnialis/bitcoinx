@@ -191,10 +191,8 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
     int nDescendantsUpdated = 0;
     addPackageTxs(minGasPrice, nPackagesSelected, nDescendantsUpdated);
 
-    pblock->hashStateRoot = h256Touint(dev::h256(EthState::Instance()->rootHash()));
-    pblock->hashUTXORoot = h256Touint(dev::h256(EthState::Instance()->rootHashUTXO()));
     EthState::Instance()->setRoot(oldHashStateRoot);
-    EthState::Instance()->setRootUTXO(oldHashUTXORoot);
+    EthState::Instance()->setUTXORoot(oldHashUTXORoot);
 
     // This should already be populated by AddBlock in case of contracts, but if no contracts
     // Then it won't get populated
@@ -323,21 +321,21 @@ bool BlockAssembler::TryToAddContractToBlock(CTxMemPool::txiter iter, uint64_t m
     if (!executor.Execut()) {
         // Error, don't add contract
         EthState::Instance()->setRoot(oldHashStateRoot);
-        EthState::Instance()->setRootUTXO(oldHashUTXORoot);
+        EthState::Instance()->setUTXORoot(oldHashUTXORoot);
         return false;
     }
 
     ExecutionResult testcontractExeResult;
     if (!executor.GetResult(testcontractExeResult)) {
         EthState::Instance()->setRoot(oldHashStateRoot);
-        EthState::Instance()->setRootUTXO(oldHashUTXORoot);
+        EthState::Instance()->setUTXORoot(oldHashUTXORoot);
         return false;
     }
 
     if (contractExeResult.totalGasUsed + testcontractExeResult.totalGasUsed > softBlockGasLimit) {
         // If this transaction could cause block gas limit to be exceeded, then don't add it
         EthState::Instance()->setRoot(oldHashStateRoot);
-        EthState::Instance()->setRootUTXO(oldHashUTXORoot);
+        EthState::Instance()->setUTXORoot(oldHashUTXORoot);
         return false;
     }
 
@@ -371,7 +369,7 @@ bool BlockAssembler::TryToAddContractToBlock(CTxMemPool::txiter iter, uint64_t m
     if (blockSigOpsCost * WITNESS_SCALE_FACTOR > MAX_BLOCK_SIGOPS_COST) {
         // Contract will not be added to block, so revert state to before we tried
         EthState::Instance()->setRoot(oldHashStateRoot);
-        EthState::Instance()->setRootUTXO(oldHashUTXORoot);
+        EthState::Instance()->setUTXORoot(oldHashUTXORoot);
         return false;
     }
 
