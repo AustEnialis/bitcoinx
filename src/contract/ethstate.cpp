@@ -152,7 +152,7 @@ private:
                 } else {
                     script = CScript() << OP_DUP << OP_HASH160 << b.first.asBytes() << OP_EQUALVERIFY << OP_CHECKSIG;
                 }
-                vout.push_back(CTxOut(CAmount(b.second / BCX_2_GAS_RATE), script));
+                vout.push_back(CTxOut(CAmount(b.second / SATOSHI_2_WEI_RATE), script));
                 mOutIdxs[b.first] = idx;
                 idx++;
             }
@@ -381,7 +381,7 @@ EthExecutionResult EthState::execute(EnvInfo const& _envInfo, EthTransaction con
         // Note, if sender was a non-standard tx, this will send the coins to pubkeyhash 0x00,
         // effectively destroying the coins
         CScript script(CScript() << OP_DUP << OP_HASH160 << _t.sender().asBytes() << OP_EQUALVERIFY << OP_CHECKSIG);
-        refundTx.vout.push_back(CTxOut(CAmount(_t.value().convert_to<uint64_t>() / BCX_2_GAS_RATE), script));
+        refundTx.vout.push_back(CTxOut(CAmount(_t.value().convert_to<uint64_t>() / SATOSHI_2_WEI_RATE), script));
     }
     // Make sure to use empty transaction if no vouts made
     return EthExecutionResult{

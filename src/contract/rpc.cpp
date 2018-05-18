@@ -146,7 +146,7 @@ UniValue createcontract(const JSONRPCRequest& request)
     CWalletTx wtx;
     wtx.nTimeSmart = GetAdjustedTime();
 
-    const CAmount nGasFee = nGasPrice * nGasLimit / BCX_2_GAS_RATE;
+    const CAmount nGasFee = nGasPrice * nGasLimit / SATOSHI_2_WEI_RATE;
     const CAmount curBalance = pwallet->GetBalance();
 
     // Check amount
@@ -447,7 +447,7 @@ UniValue sendtocontract(const JSONRPCRequest& request)
     CWalletTx wtx;
     wtx.nTimeSmart = GetAdjustedTime();
 
-    const CAmount nGasFee = nGasPrice * nGasLimit / BCX_2_GAS_RATE;
+    const CAmount nGasFee = nGasPrice * nGasLimit / SATOSHI_2_WEI_RATE;
     const CAmount curBalance = pwallet->GetBalance();
 
     // Check amount
@@ -544,7 +544,7 @@ UniValue listcontracts(const JSONRPCRequest& request)
     int i = 0;
     for (auto it = std::next(map.begin(), itStartPos); it != map.end(); it++)
     {
-        result.push_back(Pair(it->first.hex(), ValueFromAmount(CAmount(EthState::Instance()->balance(it->first) / BCX_2_GAS_RATE))));
+        result.push_back(Pair(it->first.hex(), ValueFromAmount(CAmount(EthState::Instance()->balance(it->first) / SATOSHI_2_WEI_RATE))));
         i++;
         if (i == maxDisplay) break;
     }
@@ -628,7 +628,7 @@ UniValue getcontractinfo(const JSONRPCRequest& req)
     UniValue ret(UniValue::VOBJ);
 
     ret.push_back(Pair("address", addr));
-    ret.push_back(Pair("balance", CAmount(EthState::Instance()->balance(addrAccount) / BCX_2_GAS_RATE)));
+    ret.push_back(Pair("balance", CAmount(EthState::Instance()->balance(addrAccount) / SATOSHI_2_WEI_RATE)));
     std::vector<uint8_t> code(EthState::Instance()->code(addrAccount));
     auto storage(EthState::Instance()->storage(addrAccount));
 
@@ -650,7 +650,7 @@ UniValue getcontractinfo(const JSONRPCRequest& req)
         valtype vchHash(vins[addrAccount].hash.asBytes());
         vin.push_back(Pair("hash", HexStr(vchHash.rbegin(), vchHash.rend())));
         vin.push_back(Pair("nVout", uint64_t(vins[addrAccount].nVout)));
-        vin.push_back(Pair("value", uint64_t(vins[addrAccount].value / BCX_2_GAS_RATE)));
+        vin.push_back(Pair("value", uint64_t(vins[addrAccount].value / SATOSHI_2_WEI_RATE)));
         ret.push_back(Pair("vin", vin));
     }
     return ret;

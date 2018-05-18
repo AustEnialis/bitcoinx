@@ -44,7 +44,7 @@ bool ContractExecutor::GetResult(ExecutionResult& result)
             const uint64_t gas = (uint64_t)mTxs[i].gas();
             const uint64_t gasPrice = (uint64_t)mTxs[i].gasPrice();
 
-            const int64_t amount = (gas - gasUsed) * gasPrice / BCX_2_GAS_RATE;
+            const int64_t amount = (gas - gasUsed) * gasPrice / SATOSHI_2_WEI_RATE;
             if (amount < 0) {
                 return false;
             }

@@ -690,7 +690,7 @@ static bool AcceptToMemoryPoolWorker(const CChainParams& chainparams, CTxMemPool
                     return state.DoS(100, error("AcceptToMempool(): Transaction's gas stipend overflows"), REJECT_INVALID, "bad-tx-gas-stipend-overflow");
                 }
 
-                if (sumGas > dev::u256(nFees * BCX_2_GAS_RATE)) {
+                if (sumGas > dev::u256(nFees * SATOSHI_2_WEI_RATE)) {
                     return state.DoS(100, error("AcceptToMempool(): Transaction fee does not cover the gas stipend"), REJECT_INVALID, "bad-txns-fee-notenough");
                 }
 
@@ -2075,7 +2075,7 @@ static bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockInd
                         return state.DoS(100, error("ConnectBlock(): Transaction's gas stipend overflows"), REJECT_INVALID, "bad-tx-gas-stipend-overflow");
                     }
 
-                    if (sumGas > dev::u256(nTxFee * BCX_2_GAS_RATE)) {
+                    if (sumGas > dev::u256(nTxFee * SATOSHI_2_WEI_RATE)) {
                         return state.DoS(100, error("ConnectBlock(): Transaction fee does not cover the gas stipend"), REJECT_INVALID, "bad-txns-fee-notenough");
                     }
 

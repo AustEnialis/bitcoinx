@@ -29,8 +29,8 @@ static const uint64_t STANDARD_MINIMUM_GAS_PRICE = 1;
 
 static const size_t MAX_CONTRACT_TXOUT_NUM = 1000;
 
-// Bcx to gas rate
-static const uint64_t BCX_2_GAS_RATE = 10000;
+// Satoshis to Weis rate
+static const uint64_t SATOSHI_2_WEI_RATE = 10000;
 
 
 #endif // BITCOINX_CONTRACT_CONFIG_H
