@@ -141,6 +141,8 @@ static const CRPCConvertParam vRPCConvertParams[] =
     { "sendtocontract", 7, "changeToSender" },
     { "listcontracts",  0, "start" },
     { "listcontracts",  1, "maxDisplay" },
+    { "getcontractstorage", 1, "blockNum" },
+    { "getcontractstorage", 2, "index" },
     // Echo with conversion (For testing only)
     { "echojson", 0, "arg0" },
     { "echojson", 1, "arg1" },

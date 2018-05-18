@@ -462,6 +462,28 @@ const Vin* EthState::vin(const dev::Address& _addr)
     return &it->second;
 }
 
+std::unordered_map<dev::Address, Vin> EthState::vins() const
+{
+    std::unordered_map<dev::Address, Vin> ret;
+    for (auto& i: mUTXOCache) {
+        if (i.second.alive) {
+            ret[i.first] = i.second;
+        }
+    }
+    auto addrs = addresses();
+    for (auto& i : addrs) {
+        auto pvin = const_cast<Vin*>(const_cast<EthState*>(this)->vin(i.first));
+        if (!pvin) {
+            continue;
+        }
+        if (mUTXOCache.find(i.first) != mUTXOCache.end()) {
+            continue;
+        }
+        ret[i.first] = *pvin;
+    }
+    return ret;
+}
+
 void EthState::deleteAccounts(const std::set<dev::Address>& addrs)
 {
     for (const dev::Address& addr : addrs) {

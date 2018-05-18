@@ -59,6 +59,8 @@ public:
 
     dev::h256 rootHashUTXO() const { return mUTXOState.root(); }
 
+    std::unordered_map<dev::Address, Vin> vins() const;
+
     dev::OverlayDB const& dbUtxo() const { return mUTXODB; }
     dev::OverlayDB& dbUtxo() { return mUTXODB; }
 
@@ -110,35 +112,6 @@ private:
     dev::eth::SealEngineFace* mSealEngine;
 };
 
-struct TemporaryState {
-    EthState* globalStateRef;
-    dev::h256 oldHashStateRoot;
-    dev::h256 oldHashUTXORoot;
-
-    TemporaryState(EthState* _globalStateRef)
-        : globalStateRef(_globalStateRef),
-          oldHashStateRoot(globalStateRef->rootHash()),
-          oldHashUTXORoot(globalStateRef->rootHashUTXO())
-    {
-    }
-
-    void SetRoot(dev::h256 newHashStateRoot, dev::h256 newHashUTXORoot)
-    {
-        globalStateRef->setRoot(newHashStateRoot);
-        globalStateRef->setUTXORoot(newHashUTXORoot);
-    }
-
-    ~TemporaryState()
-    {
-        globalStateRef->setRoot(oldHashStateRoot);
-        globalStateRef->setUTXORoot(oldHashUTXORoot);
-    }
-    TemporaryState() = delete;
-    TemporaryState(const TemporaryState&) = delete;
-    TemporaryState& operator=(const TemporaryState&) = delete;
-    TemporaryState(TemporaryState&&) = delete;
-    TemporaryState& operator=(TemporaryState&&) = delete;
-};
 
 
 #endif // BITCOINX_CONTRACT_ETHSTATE_H

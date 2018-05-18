@@ -8,6 +8,7 @@
 #include "pubkey.h"
 #include "rpc/server.h"
 #include "script/standard.h"
+#include "staterootview.h"
 #include "timedata.h"
 #include "univalue.h"
 #include "util.h"
@@ -603,4 +604,157 @@ UniValue fromhexaddress(const JSONRPCRequest& request) {
     CBitcoinAddress address(raw);
 
     return address.ToString();
+}
+
+UniValue getcontractinfo(const JSONRPCRequest& req)
+{
+    if (req.fHelp || req.params.size() < 1)
+        throw std::runtime_error(
+                "getcontractinfo \"address\"\n"
+                "\nArgument:\n"
+                "1. \"address\"          (string, required) The account address\n"
+                );
+
+    LOCK(cs_main);
+
+    std::string addr = req.params[0].get_str();
+    if(addr.size() != 40 || !CheckHex(addr))
+        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Incorrect address");
+
+    dev::Address addrAccount(addr);
+    if(!EthState::Instance()->addressInUse(addrAccount))
+        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Address does not exist");
+
+    UniValue ret(UniValue::VOBJ);
+
+    ret.push_back(Pair("address", addr));
+    ret.push_back(Pair("balance", CAmount(EthState::Instance()->balance(addrAccount) / BCX_2_GAS_RATE)));
+    std::vector<uint8_t> code(EthState::Instance()->code(addrAccount));
+    auto storage(EthState::Instance()->storage(addrAccount));
+
+    UniValue storageUV(UniValue::VOBJ);
+    for (auto j: storage)
+    {
+        UniValue e(UniValue::VOBJ);
+        e.push_back(Pair(dev::toHex(j.second.first), dev::toHex(j.second.second)));
+        storageUV.push_back(Pair(j.first.hex(), e));
+    }
+
+    ret.push_back(Pair("storage", storageUV));
+
+    ret.push_back(Pair("code", HexStr(code.begin(), code.end())));
+
+    std::unordered_map<dev::Address, Vin> vins = EthState::Instance()->vins();
+    if(vins.count(addrAccount)){
+        UniValue vin(UniValue::VOBJ);
+        valtype vchHash(vins[addrAccount].hash.asBytes());
+        vin.push_back(Pair("hash", HexStr(vchHash.rbegin(), vchHash.rend())));
+        vin.push_back(Pair("nVout", uint64_t(vins[addrAccount].nVout)));
+        vin.push_back(Pair("value", uint64_t(vins[addrAccount].value / BCX_2_GAS_RATE)));
+        ret.push_back(Pair("vin", vin));
+    }
+    return ret;
+}
+
+struct TemporaryState {
+    EthState* globalStateRef;
+    dev::h256 oldHashStateRoot;
+    dev::h256 oldHashUTXORoot;
+
+    TemporaryState(EthState* _globalStateRef)
+        : globalStateRef(_globalStateRef),
+          oldHashStateRoot(globalStateRef->rootHash()),
+          oldHashUTXORoot(globalStateRef->rootHashUTXO())
+    {
+    }
+
+    void SetRoot(dev::h256 newHashStateRoot, dev::h256 newHashUTXORoot)
+    {
+        globalStateRef->setRoot(newHashStateRoot);
+        globalStateRef->setUTXORoot(newHashUTXORoot);
+    }
+
+    ~TemporaryState()
+    {
+        globalStateRef->setRoot(oldHashStateRoot);
+        globalStateRef->setUTXORoot(oldHashUTXORoot);
+    }
+    TemporaryState() = delete;
+    TemporaryState(const TemporaryState&) = delete;
+    TemporaryState& operator=(const TemporaryState&) = delete;
+    TemporaryState(TemporaryState&&) = delete;
+    TemporaryState& operator=(TemporaryState&&) = delete;
+};
+
+UniValue getcontractstorage(const JSONRPCRequest& req)
+{
+    if (req.fHelp || req.params.size() < 1)
+        throw std::runtime_error(
+                "getstorage \"address\"\n"
+                "\nArgument:\n"
+                "1. \"address\"          (string, required) The address to get the storage from\n"
+                "2. \"blockNum\"         (string, optional) Number of block to get state from, \"latest\" keyword supported. Latest if not passed.\n"
+                "3. \"index\"            (number, optional) Zero-based index position of the storage\n"
+                );
+
+    LOCK(cs_main);
+
+    std::string addr = req.params[0].get_str();
+    if(addr.size() != 40 || !CheckHex(addr)) {
+        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Incorrect address");
+    }
+
+    TemporaryState ts(EthState::Instance());
+    if (req.params.size() > 1) {
+        if (req.params[1].isNum()) {
+            auto blockNum = req.params[1].get_int();
+            if((blockNum < 0 && blockNum != -1) || blockNum > chainActive.Height()) {
+                throw JSONRPCError(RPC_INVALID_PARAMS, "Incorrect block number");
+            }
+
+            if(blockNum != -1) {
+                dev::h256 stateRootHash;
+                dev::h256 utxoRootHash;
+                if (!StateRootView::Instance()->GetRoot(chainActive[blockNum]->GetBlockHash(), stateRootHash, utxoRootHash)) {
+                    throw JSONRPCError(RPC_INVALID_PARAMS, "Incorrect block number, contract non-active");
+                }
+                ts.SetRoot(stateRootHash, utxoRootHash);
+            }
+        } else {
+            throw JSONRPCError(RPC_INVALID_PARAMS, "Incorrect block number");
+        }
+    }
+
+    dev::Address addrAccount(addr);
+    if(!EthState::Instance()->addressInUse(addrAccount)) {
+        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Address does not exist");
+    }
+
+    UniValue ret(UniValue::VOBJ);
+
+    bool onlyIndex = req.params.size() > 2;
+    uint32_t index = 0;
+    if (onlyIndex)
+        index = req.params[2].get_int();
+
+    auto storage(EthState::Instance()->storage(addrAccount));
+
+    if (onlyIndex) {
+        if (index >= storage.size()) {
+            std::ostringstream stringStream;
+            stringStream << "Storage size: " << storage.size() << " got index: " << index;
+            throw JSONRPCError(RPC_INVALID_PARAMS, stringStream.str());
+        }
+        auto elem = std::next(storage.begin(), index);
+        UniValue e(UniValue::VOBJ);
+
+        storage = {{elem->first, {elem->second.first, elem->second.second}}};
+    }
+    for (const auto& j: storage)
+    {
+        UniValue e(UniValue::VOBJ);
+        e.push_back(Pair(dev::toHex(j.second.first), dev::toHex(j.second.second)));
+        ret.push_back(Pair(j.first.hex(), e));
+    }
+    return ret;
 }

@@ -1568,6 +1568,8 @@ UniValue getchaintxstats(const JSONRPCRequest& request)
 // in contract/rpc.cpp
 extern UniValue callcontract(const JSONRPCRequest& request);
 extern UniValue listcontracts(const JSONRPCRequest& request);
+extern UniValue getcontractinfo(const JSONRPCRequest& request);
+extern UniValue getcontractstorage(const JSONRPCRequest& request);
 
 static const CRPCCommand commands[] =
 { //  category              name                      actor (function)         okSafe argNames
@@ -1595,6 +1597,8 @@ static const CRPCCommand commands[] =
 
     { "contract",           "callcontract",           &callcontract,           true,  {"address","data"} },
     { "contract",           "listcontracts",           &listcontracts,         true,  {"start","maxDisplay"} }, 
+    { "contract",           "getcontractinfo",        &getcontractinfo,        true,  {"contract_address"} },
+    { "contract",           "getcontractstorage",     &getcontractstorage,     true,  {"address, blockNum, index"} },
 
     /* Not shown in help */
     { "hidden",             "invalidateblock",        &invalidateblock,        true,  {"blockhash"} },
