@@ -1,5 +1,6 @@
 #include "ethtxconverter.h"
 #include "chainparams.h"
+#include "contractutil.h"
 #include "config.h"
 #include "pubkey.h"
 #include "script/interpreter.h"
@@ -140,19 +141,11 @@ static valtype GetSenderAddress(const CTransaction& tx, const CCoinsViewCache* c
     return valtype();
 }
 
-EthTransaction EthTxConverter::createEthTx(const EthTransactionParams& params, uint32_t idx)
+EthTransaction EthTxConverter::createEthTx(const EthTransactionParams& params, uint32_t outIdx)
 {
-    EthTransaction txEth;
-    if (params.receiveAddress == dev::Address() && opcode != OP_SENDTOCONTRACT) {
-        txEth = EthTransaction(txBit.vout[idx].nValue * SATOSHI_2_WEI_RATE, params.gasPrice, params.gasLimit, params.code, dev::u256(0));
-    } else {
-        txEth = EthTransaction(txBit.vout[idx].nValue * SATOSHI_2_WEI_RATE, params.gasPrice, params.gasLimit, params.receiveAddress, params.code, dev::u256(0));
-    }
-    dev::Address sender(GetSenderAddress(txBit, view, blockTransactions));
-    txEth.forceSender(sender);
-    txEth.SetHashWith(uintToh256(txBit.GetHash()));
-    txEth.SetOutIdx(idx);
-    txEth.SetParams(params);
-
-    return txEth;
+    const dev::h256 value(txBit.vout[outIdx].nValue * SATOSHI_2_WEI_RATE);
+    const dev::Address sender(GetSenderAddress(txBit, view, blockTransactions));
+    const dev::h256 txHash(uintToh256(txBit.GetHash()));
+    const bool bIsSend = (opcode == OP_SENDTOCONTRACT);
+    return ContractUtil::CreateEthTransaction(value, params, sender, txHash, outIdx, bIsSend);
 }

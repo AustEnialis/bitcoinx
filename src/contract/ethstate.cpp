@@ -275,7 +275,7 @@ EthExecutionResult EthState::execute(EnvInfo const& _envInfo, EthTransaction con
     addBalance(_t.sender(), _t.value() + (_t.gas() * _t.gasPrice()));
 
     if (_t.isCreation()) {
-        mNewAddress = ContractUtil::createContractAddr(h256Touint(_t.GetHashWith()), _t.GetOutIdx());
+        mNewAddress = ContractUtil::CreateContractAddr(_t.GetHashWith(), _t.GetOutIdx());
     } else {
         mNewAddress = dev::Address();
     }
