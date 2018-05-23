@@ -18,7 +18,8 @@
 #include "wallet/coincontrol.h"
 #include "wallet/rpcwallet.h"
 #include "wallet/wallet.h"
-
+#include "txexecrecord.h"
+#include "txdb.h"
 
 extern std::unique_ptr<CConnman> g_connman;
 
@@ -757,4 +758,501 @@ UniValue getcontractstorage(const JSONRPCRequest& req)
         ret.push_back(Pair(j.first.hex(), e));
     }
     return ret;
+}
+
+static size_t parseUInt(const UniValue& val, size_t defaultVal)
+{
+    if (val.isNull()) {
+        return defaultVal;
+    } else {
+        int n = val.get_int();
+        if (n < 0) {
+            throw JSONRPCError(RPC_INVALID_PARAMS, "Expects unsigned integer");
+        }
+
+        return n;
+    }
+}
+
+static int parseBlockHeight(const UniValue& val)
+{
+    if (val.isStr()) {
+        auto blockKey = val.get_str();
+
+        if (blockKey == "latest") {
+            return latestblock.height;
+        } else {
+            throw JSONRPCError(RPC_INVALID_PARAMS, "invalid block number");
+        }
+    }
+
+    if (val.isNum()) {
+        int blockHeight = val.get_int();
+
+        if (blockHeight < 0) {
+            return latestblock.height;
+        }
+
+        return blockHeight;
+    }
+
+    throw JSONRPCError(RPC_INVALID_PARAMS, "invalid block number");
+}
+
+static int parseBlockHeight(const UniValue& val, int defaultVal)
+{
+    if (val.isNull()) {
+        return defaultVal;
+    } else {
+        return parseBlockHeight(val);
+    }
+}
+
+static dev::h160 parseParamH160(const UniValue& val)
+{
+    if (!val.isStr()) {
+        throw JSONRPCError(RPC_INVALID_PARAMS, "Invalid hex 160");
+    }
+
+    auto addrStr = val.get_str();
+
+    if (addrStr.length() != 40 || !CheckHex(addrStr)) {
+        throw JSONRPCError(RPC_INVALID_PARAMS, "Invalid hex 160 string");
+    }
+    return dev::h160(addrStr);
+}
+
+static void parseParam(const UniValue& val, std::vector<dev::h160>& h160s)
+{
+    if (val.isNull()) {
+        return;
+    }
+
+    // Treat a string as an array of length 1
+    if (val.isStr()) {
+        h160s.push_back(parseParamH160(val.get_str()));
+        return;
+    }
+
+    if (!val.isArray()) {
+        throw JSONRPCError(RPC_INVALID_PARAMS, "Expect an array of hex 160 strings");
+    }
+
+    auto vals = val.getValues();
+    h160s.resize(vals.size());
+
+    std::transform(vals.begin(), vals.end(), h160s.begin(), [](UniValue val) -> dev::h160 {
+        return parseParamH160(val);
+    });
+}
+
+static void parseParam(const UniValue& val, std::set<dev::h160>& h160s)
+{
+    std::vector<dev::h160> v;
+    parseParam(val, v);
+    h160s.insert(v.begin(), v.end());
+}
+
+static void parseParam(const UniValue& val, std::vector<boost::optional<dev::h256>>& h256s)
+{
+    if (val.isNull()) {
+        return;
+    }
+
+    if (!val.isArray()) {
+        throw JSONRPCError(RPC_INVALID_PARAMS, "Expect an array of hex 256 strings");
+    }
+
+    auto vals = val.getValues();
+    h256s.resize(vals.size());
+
+    std::transform(vals.begin(), vals.end(), h256s.begin(), [](UniValue val) -> boost::optional<dev::h256> {
+        if (val.isNull()) {
+            return boost::optional<dev::h256>();
+        }
+
+        if (!val.isStr()) {
+            throw JSONRPCError(RPC_INVALID_PARAMS, "Invalid hex 256 string");
+        }
+
+        auto addrStr = val.get_str();
+
+        if (addrStr.length() != 64 || !CheckHex(addrStr)) {
+            throw JSONRPCError(RPC_INVALID_PARAMS, "Invalid hex 256 string");
+        }
+
+        return boost::optional<dev::h256>(dev::h256(addrStr));
+    });
+}
+
+static void addJSON(UniValue& entry, const TxExecRecordInfo& resExec)
+{
+    entry.push_back(Pair("blockHash", resExec.blockHash.GetHex()));
+    entry.push_back(Pair("blockNumber", uint64_t(resExec.blockNumber)));
+    entry.push_back(Pair("transactionHash", resExec.transactionHash.GetHex()));
+    entry.push_back(
+        Pair("transactionIndex", uint64_t(resExec.transactionIndex)));
+    entry.push_back(Pair("from", resExec.from.hex()));
+    entry.push_back(Pair("to", resExec.to.hex()));
+    entry.push_back(
+        Pair("cumulativeGasUsed", CAmount(resExec.cumulativeGasUsed)));
+    entry.push_back(Pair("gasUsed", CAmount(resExec.gasUsed)));
+    entry.push_back(Pair("contractAddress", resExec.contractAddress.hex()));
+    std::stringstream ss;
+    ss << resExec.excepted;
+    entry.push_back(Pair("excepted", ss.str()));
+}
+
+static void addJSON(UniValue& logEntry, const dev::eth::LogEntry& log, bool includeAddress)
+{
+    if (includeAddress) {
+        logEntry.push_back(Pair("address", log.address.hex()));
+    }
+
+    UniValue topics(UniValue::VARR);
+    for (dev::h256 hash : log.topics) {
+        topics.push_back(hash.hex());
+    }
+    logEntry.push_back(Pair("topics", topics));
+    logEntry.push_back(Pair("data", HexStr(log.data)));
+}
+
+static void TxExecRecordInfoToJSON(const TxExecRecordInfo& resExec, UniValue& entry)
+{
+    addJSON(entry, resExec);
+
+    const auto& logs = resExec.logs;
+    UniValue logEntries(UniValue::VARR);
+    for (const auto& log : logs) {
+        UniValue logEntry(UniValue::VOBJ);
+        addJSON(logEntry, log, true);
+        logEntries.push_back(logEntry);
+    }
+    entry.push_back(Pair("log", logEntries));
+}
+
+class WaitForLogsParams
+{
+public:
+    int fromBlock;
+    int toBlock;
+
+    int minconf;
+
+    std::set<dev::h160> addresses;
+    std::vector<boost::optional<dev::h256>> topics;
+
+    // bool wait;
+    WaitForLogsParams(const UniValue& params)
+    {
+        std::unique_lock<std::mutex> lock(cs_blockchange);
+        fromBlock = parseBlockHeight(params[0], latestblock.height + 1);
+        toBlock = parseBlockHeight(params[1], -1);
+        parseFilter(params[2]);
+        minconf = parseUInt(params[3], 6);
+    }
+
+private:
+    void parseFilter(const UniValue& val)
+    {
+        if (val.isNull()) {
+            return;
+        }
+
+        parseParam(val["addresses"], addresses);
+        parseParam(val["topics"], topics);
+    }
+};
+
+UniValue waitforexecrecord(const JSONRPCRequest& request_)
+{
+    // this is a long poll function. force cast to non const pointer
+    JSONRPCRequest& request = (JSONRPCRequest&)request_;
+    if (request.fHelp) {
+        throw std::runtime_error(
+            "waitforexecrecord (fromBlock) (toBlock) (filter) (minconf)\n"
+            "requires -logevents to be enabled\n"
+            "\nWaits for a new logs and return matching log entries. When the call returns, it also specifies the next block number to start waiting for new logs.\n"
+            "By calling waitforexecrecord repeatedly using the returned `nextBlock` number, a client can receive a stream of up-to-date log entires.\n"
+            "\nThis call is different from the similarly named `waitforexecrecord`. This call returns individual matching log entries, `searchexecrecord` returns a transaction receipt if one of the log entries of that transaction matches the filter conditions.\n"
+            "\nArguments:\n"
+            "1. fromBlock (int | \"latest\", optional, default=null) The block number to start looking for logs. ()\n"
+            "2. toBlock   (int | \"latest\", optional, default=null) The block number to stop looking for logs. If null, will wait indefinitely into the future.\n"
+            "3. filter    ({ addresses?: Hex160String[], topics?: Hex256String[] }, optional default={}) Filter conditions for logs. Addresses and topics are specified as array of hexadecimal strings\n"
+            "4. minconf   (uint, optional, default=6) Minimal number of confirmations before a log is returned\n"
+            "\nResult:\n"
+            "An object with the following properties:\n"
+            "1. logs (LogEntry[]) Array of matchiing log entries. This may be empty if `filter` removed all entries."
+            "2. count (int) How many log entries are returned."
+            "3. nextBlock (int) To wait for new log entries haven't seen before, use this number as `fromBlock`"
+            "\nUsage:\n"
+            "`waitforexecrecord` waits for new logs, starting from the tip of the chain.\n"
+            "`waitforexecrecord 600` waits for new logs, but starting from block 600. If there are logs available, this call will return immediately.\n"
+            "`waitforexecrecord 600 700` waits for new logs, but only up to 700th block\n"
+            "`waitforexecrecord null null` this is equivalent to `waitforexecrecord`, using default parameter values\n"
+            "`waitforexecrecord null null` { \"addresses\": [ \"ff0011...\" ], \"topics\": [ \"c0fefe\"] }` waits for logs in the future matching the specified conditions\n"
+            "\nSample Output:\n"
+            "{\n  \"entries\": [\n    {\n      \"blockHash\": \"56d5f1f5ec239ef9c822d9ed600fe9aa63727071770ac7c0eabfc903bf7316d4\",\n      \"blockNumber\": 3286,\n      \"transactionHash\": \"00aa0f041ce333bc3a855b2cba03c41427cda04f0334d7f6cb0acad62f338ddc\",\n      \"transactionIndex\": 2,\n      \"from\": \"3f6866e2b59121ada1ddfc8edc84a92d9655675f\",\n      \"to\": \"8e1ee0b38b719abe8fa984c986eabb5bb5071b6b\",\n      \"cumulativeGasUsed\": 23709,\n      \"gasUsed\": 23709,\n      \"contractAddress\": \"8e1ee0b38b719abe8fa984c986eabb5bb5071b6b\",\n      \"topics\": [\n        \"f0e1159fa6dc12bb31e0098b7a1270c2bd50e760522991c6f0119160028d9916\",\n        \"0000000000000000000000000000000000000000000000000000000000000002\"\n      ],\n      \"data\": \"00000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000003\"\n    }\n  ],\n\n  \"count\": 7,\n  \"nextblock\": 801\n}\n");
+    }
+
+    if (!fLogEvents)
+        throw JSONRPCError(RPC_INTERNAL_ERROR, "Events indexing disabled");
+
+    WaitForLogsParams params(request.params);
+
+    request.PollStart();
+    std::vector<std::vector<uint256>> hashesToBlock;
+    int curheight = 0;
+    auto& addresses = params.addresses;
+    auto& filterTopics = params.topics;
+    while (curheight == 0) {
+        {
+            LOCK(cs_main);
+            curheight = pblocktree->ReadHeightIndex(params.fromBlock, params.toBlock, params.minconf,
+                hashesToBlock, addresses);
+        }
+
+        // if curheight >= fromBlock. Blockchain extended with new log entries. Return next block height to client.
+        //    nextBlock = curheight + 1
+        // if curheight == 0. No log entry found in index. Wait for new block then try again.
+        //    nextBlock = fromBlock
+        // if curheight == -1. Incorrect parameters has entered.
+        //
+        // if curheight advanced, but all filtered out, API should return empty array, but advancing the cursor anyway.
+
+        if (curheight > 0) {
+            break;
+        }
+
+        if (curheight == -1) {
+            throw JSONRPCError(RPC_INVALID_PARAMETER, "Incorrect params");
+        }
+
+        // check the range
+        if (params.toBlock > -1 && latestblock.height >= params.toBlock) {
+            break;
+        }
+
+        // wait for a new block to arrive
+        {
+            while (true) {
+                std::unique_lock<std::mutex> lock(cs_blockchange);
+                auto blockHeight = latestblock.height;
+                request.PollPing();
+
+                cond_blockchange.wait_for(lock, std::chrono::milliseconds(1000));
+                if (latestblock.height > blockHeight) {
+                    break;
+                }
+
+                // TODO: maybe just merge `IsRPCRunning` this into PollAlive
+                if (!request.PollAlive() || !IsRPCRunning()) {
+                    LogPrintf("waitforexecrecord client disconnected\n");
+                    return NullUniValue;
+                }
+            }
+        }
+    }
+
+    LOCK(cs_main);
+
+    UniValue jsonLogs(UniValue::VARR);
+
+    for (const auto& txHashes : hashesToBlock) {
+        for (const auto& txHash : txHashes) {
+            std::vector<TxExecRecordInfo> receipts = TxExecRecord::Instance()->Get(
+                uintToh256(txHash));
+
+            for (const auto& receipt : receipts) {
+                for (const auto& log : receipt.logs) {
+                    bool includeLog = true;
+
+                    if (!filterTopics.empty()) {
+                        for (size_t i = 0; i < filterTopics.size(); i++) {
+                            auto filterTopic = filterTopics[i];
+
+                            if (!filterTopic) {
+                                continue;
+                            }
+
+                            auto filterTopicContent = filterTopic.get();
+                            auto topicContent = log.topics[i];
+
+                            if (topicContent != filterTopicContent) {
+                                includeLog = false;
+                                break;
+                            }
+                        }
+                    }
+
+
+                    if (!includeLog) {
+                        continue;
+                    }
+
+                    UniValue jsonLog(UniValue::VOBJ);
+                    addJSON(jsonLog, log, false);
+                    jsonLogs.push_back(jsonLog);
+                }
+
+                UniValue jsonLog(UniValue::VOBJ);
+                addJSON(jsonLog, receipt);
+                jsonLogs.push_back(jsonLog);
+            }
+        }
+    }
+
+    UniValue result(UniValue::VOBJ);
+    result.push_back(Pair("entries", jsonLogs));
+    result.push_back(Pair("count", (int)jsonLogs.size()));
+    result.push_back(Pair("nextblock", curheight + 1));
+
+    return result;
+}
+
+class SearchLogsParams
+{
+public:
+    size_t fromBlock;
+    size_t toBlock;
+    size_t minconf;
+
+    std::set<dev::h160> addresses;
+    std::vector<boost::optional<dev::h256>> topics;
+
+    SearchLogsParams(const UniValue& params)
+    {
+        std::unique_lock<std::mutex> lock(cs_blockchange);
+
+        setFromBlock(params[0]);
+        setToBlock(params[1]);
+
+        parseParam(params[2]["addresses"], addresses);
+        parseParam(params[3]["topics"], topics);
+
+        minconf = parseUInt(params[4], 0);
+    }
+
+private:
+    void setFromBlock(const UniValue& val)
+    {
+        if (!val.isNull()) {
+            fromBlock = parseBlockHeight(val);
+        } else {
+            fromBlock = latestblock.height;
+        }
+    }
+
+    void setToBlock(const UniValue& val)
+    {
+        if (!val.isNull()) {
+            toBlock = parseBlockHeight(val);
+        } else {
+            toBlock = latestblock.height;
+        }
+    }
+};
+
+UniValue searchexecrecord(const JSONRPCRequest& request)
+{
+    if (request.fHelp || request.params.size() < 2)
+        throw std::runtime_error(
+            "searchexecrecord <fromBlock> <toBlock> (address) (topics)\n"
+            "requires -logevents to be enabled"
+            "\nArgument:\n"
+            "1. \"fromBlock\"        (numeric, required) The number of the earliest block (latest may be given to mean the most recent block).\n"
+            "2. \"toBlock\"          (string, required) The number of the latest block (-1 may be given to mean the most recent block).\n"
+            "3. \"address\"          (string, optional) An address or a list of addresses to only get logs from particular account(s).\n"
+            "4. \"topics\"           (string, optional) An array of values from which at least one must appear in the log entries. The order is important, if you want to leave topics out use null, e.g. [\"null\", \"0x00...\"]. \n"
+            "\nExamples:\n" +
+            HelpExampleCli("searchexecrecord", "0 100 '{\"addresses\": [\"12ae42729af478ca92c8c66773a3e32115717be4\"]}' '{\"topics\": [\"null\",\"b436c2bf863ccd7b8f63171201efd4792066b4ce8e543dde9c3e9e9ab98e216c\"]}'") + HelpExampleRpc("searchexecrecord", "0 100 {\"addresses\": [\"12ae42729af478ca92c8c66773a3e32115717be4\"]} {\"topics\": [\"null\",\"b436c2bf863ccd7b8f63171201efd4792066b4ce8e543dde9c3e9e9ab98e216c\"]}"));
+
+    if (!fLogEvents)
+        throw JSONRPCError(RPC_INTERNAL_ERROR, "Events indexing disabled");
+    int curheight = 0;
+
+    LOCK(cs_main);
+
+    SearchLogsParams params(request.params);
+
+    std::vector<std::vector<uint256>> hashesToBlock;
+
+    curheight = pblocktree->ReadHeightIndex(params.fromBlock, params.toBlock, params.minconf, hashesToBlock, params.addresses);
+    if (curheight == -1) {
+        throw JSONRPCError(RPC_INVALID_PARAMETER, "Incorrect params");
+    }
+
+    UniValue result(UniValue::VARR);
+
+    auto topics = params.topics;
+
+    for (const auto& hashesTx : hashesToBlock) {
+        for (const auto& e : hashesTx) {
+            std::vector<TxExecRecordInfo> txexecrecordinfo = TxExecRecord::Instance()->Get(uintToh256(e));
+            for (const auto& receipt : txexecrecordinfo) {
+                //  if(receipt.logs.empty()) {
+                //      continue;
+                //  }
+
+                if (!topics.empty()) {
+                    for (size_t i = 0; i < topics.size(); i++) {
+                        const auto& tc = topics[i];
+
+                        if (!tc) {
+                            continue;
+                        }
+
+                        for (const auto& log : receipt.logs) {
+                            auto filterTopicContent = tc.get();
+
+                            if (i >= log.topics.size()) {
+                                continue;
+                            }
+
+                            if (filterTopicContent == log.topics[i]) {
+                                goto push;
+                            }
+                        }
+                    }
+
+                    // Skip the log if none of the topics are matched
+                    continue;
+                }
+
+            push:
+
+                UniValue tri(UniValue::VOBJ);
+                TxExecRecordInfoToJSON(receipt, tri);
+                result.push_back(tri);
+            }
+        }
+    }
+
+    return result;
+}
+
+UniValue getexecrecord(const JSONRPCRequest& request)
+{
+    if (request.fHelp || request.params.size() < 1)
+        throw std::runtime_error(
+            "getexecrecord \"hash\"\n"
+            "requires -logevents to be enabled"
+            "\nArgument:\n"
+            "1. \"hash\"          (string, required) The transaction hash\n");
+    if (!fLogEvents)
+        throw JSONRPCError(RPC_INTERNAL_ERROR, "Events indexing disabled");
+    LOCK(cs_main);
+    std::string hashTemp = request.params[0].get_str();
+    if (hashTemp.size() != 64) {
+        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Incorrect hash");
+    }
+    uint256 hash(uint256S(hashTemp));
+    std::vector<TxExecRecordInfo> txexecrecordinfo = TxExecRecord::Instance()->Get(uintToh256(hash));
+    UniValue result(UniValue::VARR);
+    for (TxExecRecordInfo& t : txexecrecordinfo) {
+        UniValue tri(UniValue::VOBJ);
+        TxExecRecordInfoToJSON(t, tri);
+        result.push_back(tri);
+    }
+    return result;
 }

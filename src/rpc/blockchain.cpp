@@ -34,17 +34,8 @@
 #include <mutex>
 #include <condition_variable>
 
-struct CUpdatedBlock
-{
-    uint256 hash;
-    int height;
-};
-
-static std::mutex cs_blockchange;
-static std::condition_variable cond_blockchange;
-static CUpdatedBlock latestblock;
-
 extern void TxToJSON(const CTransaction& tx, const uint256 hashBlock, UniValue& entry);
+
 
 double GetDifficultyBCX(const CBlockIndex* blockindex)
 {
@@ -1570,6 +1561,9 @@ extern UniValue callcontract(const JSONRPCRequest& request);
 extern UniValue listcontracts(const JSONRPCRequest& request);
 extern UniValue getcontractinfo(const JSONRPCRequest& request);
 extern UniValue getcontractstorage(const JSONRPCRequest& request);
+extern UniValue waitforexecrecord(const JSONRPCRequest& request_);
+extern UniValue searchexecrecord(const JSONRPCRequest& request);
+extern UniValue getexecrecord(const JSONRPCRequest& request);
 
 static const CRPCCommand commands[] =
 { //  category              name                      actor (function)         okSafe argNames
@@ -1596,9 +1590,12 @@ static const CRPCCommand commands[] =
     { "blockchain",         "preciousblock",          &preciousblock,          true,  {"blockhash"} },
 
     { "contract",           "callcontract",           &callcontract,           true,  {"address","data"} },
-    { "contract",           "listcontracts",           &listcontracts,         true,  {"start","maxDisplay"} }, 
+    { "contract",           "listcontracts",          &listcontracts,          true,  {"start","maxDisplay"} }, 
     { "contract",           "getcontractinfo",        &getcontractinfo,        true,  {"contract_address"} },
     { "contract",           "getcontractstorage",     &getcontractstorage,     true,  {"address, blockNum, index"} },
+  	{ "contract",         	"searchexecrecord",       &searchexecrecord,       true,  {"fromBlock", "toBlock", "address", "topics"} },
+   	{ "contract",         	"waitforexecrecord",      &waitforexecrecord,      true,  {"fromBlock", "nblocks", "address", "topics"} },
+	{ "contract",           "getexecrecord",          &getexecrecord,          true,  {"hash"} },
 
     /* Not shown in help */
     { "hidden",             "invalidateblock",        &invalidateblock,        true,  {"blockhash"} },
@@ -1606,6 +1603,7 @@ static const CRPCCommand commands[] =
     { "hidden",             "waitfornewblock",        &waitfornewblock,        true,  {"timeout"} },
     { "hidden",             "waitforblock",           &waitforblock,           true,  {"blockhash","timeout"} },
     { "hidden",             "waitforblockheight",     &waitforblockheight,     true,  {"height","timeout"} },
+
 };
 
 void RegisterBlockchainRPCCommands(CRPCTable &t)
@@ -1613,3 +1611,4 @@ void RegisterBlockchainRPCCommands(CRPCTable &t)
     for (unsigned int vcidx = 0; vcidx < ARRAYLEN(commands); vcidx++)
         t.appendCommand(commands[vcidx].name, &commands[vcidx]);
 }
+

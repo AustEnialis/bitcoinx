@@ -59,6 +59,7 @@
 #include "contract/staterootview.h"
 #include "contract/txexecrecord.h"
 #include "contract/vmlog.h"
+#include "pubkey.h"
 
 
 #if defined(NDEBUG)
@@ -1977,6 +1978,7 @@ static bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockInd
     std::vector<std::pair<uint256, CDiskTxPos> > vPos;
     vPos.reserve(block.vtx.size());
     blockundo.vtxundo.reserve(block.vtx.size() - 1);
+    std::map<dev::Address, std::pair<CHeightTxIndexKey, std::vector<uint256>>> heightIndexes;
     std::vector<PrecomputedTransactionData> txdata;
     txdata.reserve(block.vtx.size()); // Required so that pointers to individual PrecomputedTransactionData don't get invalidated
 
@@ -2124,8 +2126,16 @@ static bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockInd
 
                 countCumulativeGasUsed += exeResult.totalGasUsed;
                 std::vector<TxExecRecordInfo> recordInfo;
-                if (fLogEvents) {
+                if (fLogEvents) 
+				{
                     for (size_t k = 0; k < ethTxs.size(); k++) {
+					dev::Address key = ethExeResult[k].execRes.newAddress;
+                    	if(!heightIndexes.count(key))
+						{
+                        	heightIndexes[key].first = CHeightTxIndexKey(pindex->nHeight, ethExeResult[k].execRes.newAddress);
+                    	}
+ 						heightIndexes[key].second.push_back(tx.GetHash());
+						
                         recordInfo.push_back(TxExecRecordInfo{
                             block.GetHash(),
                             uint32_t(pindex->nHeight),
@@ -2266,6 +2276,16 @@ static bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockInd
         setDirtyBlockIndex.insert(pindex);
     }
 
+
+    if (fLogEvents)
+    {
+        for (const auto& e: heightIndexes)
+        {
+            if (!pblocktree->WriteHeightIndex(e.second.first, e.second.second))
+                return AbortNode(state, "Failed to write height index");
+        }
+    }
+	
     if (fTxIndex)
         if (!pblocktree->WriteTxIndex(vPos))
             return AbortNode(state, "Failed to write transaction index");
@@ -3228,6 +3248,46 @@ static bool FindUndoPos(CValidationState &state, int nFile, CDiskBlockPos &pos, 
     }
 
     return true;
+}
+
+bool GetBlockPublicKey(const CBlock& block, std::vector<unsigned char>& vchPubKey)
+{
+
+    std::vector<valtype> vSolutions;
+    txnouttype whichType;
+
+    const CTxOut& txout = block.vtx[1]->vout[1];
+
+    if (!Solver(txout.scriptPubKey, whichType, vSolutions))
+        return false;
+
+    if (whichType == TX_PUBKEY)
+    {
+        vchPubKey = vSolutions[0];
+        return true;
+    }
+    else
+    {
+        // Block signing key also can be encoded in the nonspendable output
+        // This allows to not pollute UTXO set with useless outputs e.g. in case of multisig staking
+
+        const CScript& script = txout.scriptPubKey;
+        CScript::const_iterator pc = script.begin();
+        opcodetype opcode;
+        valtype vchPushValue;
+
+        if (!script.GetOp(pc, opcode, vchPubKey))
+            return false;
+        if (opcode != OP_RETURN)
+            return false;
+        if (!script.GetOp(pc, opcode, vchPubKey))
+            return false;
+        if (!IsCompressedOrUncompressedPubKey(vchPubKey))
+            return false;
+        return true;
+    }
+
+    return false;
 }
 
 static bool CheckBlockHeader(const CBlockHeader& block, CValidationState& state, const Consensus::Params& consensusParams, bool fCheckPOW = true)
