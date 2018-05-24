@@ -109,7 +109,7 @@ struct TestMemPoolEntryHelper
     TestMemPoolEntryHelper() :
         nFee(0), nTime(0), nHeight(1),
         spendsCoinbase(false), sigOpCost(4) { }
-    
+
     CTxMemPoolEntry FromTx(const CMutableTransaction &tx);
     CTxMemPoolEntry FromTx(const CTransaction &tx);
 
@@ -124,7 +124,23 @@ struct TestMemPoolEntryHelper
 class TestContractHelper
 {
 public:
-    static EthTransaction CreateEthTx(const dev::u256& value, const dev::u256& gasLimit, const dev::u256& gasPrice, const valtype& data, const dev::Address& recipient, const dev::h256& txHash, uint32_t outIdx = 0);
+    static EthTransaction CreateEthTx(
+            const dev::u256& value,
+            const dev::u256& gasLimit,
+            const dev::u256& gasPrice,
+            const valtype& data,
+            const dev::Address& recipient,
+            const dev::h256& txHash,
+            uint32_t outIdx = 0);
+
+    static EthTransaction CreateEthTx(
+            const valtype& data,
+            const dev::u256& value,
+            const dev::u256& gasLimit,
+            const dev::u256& gasPrice,
+            const dev::h256& hashTransaction,
+            const dev::Address& recipient,
+            uint32_t nvout = 0);
 
     static std::pair<std::vector<EthExecutionResult>, ExecutionResult> Execute(const std::vector<EthTransaction> &txs);
 };
