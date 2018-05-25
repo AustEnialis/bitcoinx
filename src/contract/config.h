@@ -1,6 +1,7 @@
 #ifndef BITCOINX_CONTRACT_CONFIG_H
 #define BITCOINX_CONTRACT_CONFIG_H
 
+#include <cstddef>
 #include <stdint.h>
 
 /** Minimum gas limit that is allowed in a transaction within a block - prevent
