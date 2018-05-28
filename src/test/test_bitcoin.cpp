@@ -26,6 +26,8 @@
 
 #include <boost/filesystem.hpp>
 #include <libethashseal/Ethash.h>
+#include "contract/config.h"
+#include "contract/contractutil.h"
 #include "contract/ethstate.h"
 #include "contract/staterootview.h"
 #include "contract/txexecrecord.h"
@@ -92,7 +94,7 @@ TestingSetup::TestingSetup(const std::string& chainName) : BasicTestingSetup(cha
 
         // contract
         const auto contractPath = pathTemp / "contractstate";
-        dev::eth::Ethash::init();		
+        dev::eth::Ethash::init();
         fs::create_directories(contractPath);
         StateRootView::Init(contractPath, false);
         StateRootView::Instance()->InitGenesis(chainparams);
@@ -203,4 +205,61 @@ CTxMemPoolEntry TestMemPoolEntryHelper::FromTx(const CMutableTransaction &tx) {
 CTxMemPoolEntry TestMemPoolEntryHelper::FromTx(const CTransaction &txn) {
     return CTxMemPoolEntry(MakeTransactionRef(txn), nFee, nTime, nHeight,
                            spendsCoinbase, sigOpCost, lp);
+}
+
+EthTransaction TestContractHelper::CreateEthTx(
+        const dev::u256& value,
+        const dev::u256& gasLimit,
+        const dev::u256& gasPrice,
+        const valtype& data,
+        const dev::Address& recipient,
+        const dev::h256& txHash,
+        uint32_t outIdx/* = 0*/) {
+
+    EthTransactionParams params;
+    params.version = EthTxVersion::GetDefault();
+    params.gasLimit = gasLimit;
+    params.gasPrice = gasPrice;
+    params.code = data;
+    params.receiveAddress = recipient;
+    const dev::Address sender(dev::Address("0101010101010101010101010101010101010101"));
+    return ContractUtil::CreateEthTransaction(value, params, sender, txHash, outIdx);
+}
+
+EthTransaction TestContractHelper::CreateEthTx(
+        const valtype& data,
+        const dev::u256& value,
+        const dev::u256& gasLimit,
+        const dev::u256& gasPrice,
+        const dev::h256& hashTransaction,
+        const dev::Address& recipient,
+        uint32_t nvout) {
+
+    return CreateEthTx(value, gasLimit, gasPrice, data, recipient, hashTransaction, nvout);
+}
+
+static CBlock generateBlock()
+{
+    CBlock block;
+    CMutableTransaction tx;
+    std::vector<unsigned char> address(ParseHex("abababababababababababababababababababab"));
+    tx.vout.push_back(CTxOut(0, CScript() << OP_DUP << OP_HASH160 << address << OP_EQUALVERIFY << OP_CHECKSIG));
+    block.vtx.push_back(MakeTransactionRef(CTransaction(tx)));
+    return block;
+}
+
+std::pair<std::vector<EthExecutionResult>, ExecutionResult> TestContractHelper::Execute(const std::vector<EthTransaction> &txs)
+{
+    const CBlock block(generateBlock());
+    ContractExecutor executor(block, txs, DEFAULT_BLOCK_GAS_LIMIT);
+    executor.Execut();
+
+    const std::vector<EthExecutionResult> ethExeResult(executor.GetEthResults());
+    ExecutionResult exeResult;
+    executor.GetResult(exeResult);
+
+    EthState::Instance()->db().commit();
+    EthState::Instance()->dbUtxo().commit();
+
+    return std::make_pair(ethExeResult, exeResult);
 }

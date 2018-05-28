@@ -201,7 +201,7 @@ UniValue createcontract(const JSONRPCRequest& request)
         uint32_t outIdx = 0;
         for (const CTxOut& txout : wtx.tx->vout) {
             if (txout.scriptPubKey.HasCreateContractOp()) {
-                const dev::Address& contractAddr = ContractUtil::createContractAddr(wtx.GetHash(), outIdx);
+                const dev::Address& contractAddr = ContractUtil::CreateContractAddr(wtx.GetHash(), outIdx);
                 result.push_back(Pair("address", HexStr(contractAddr.asBytes())));
                 break;
             }

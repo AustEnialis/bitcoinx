@@ -20,7 +20,7 @@ private:
     bool receiveStack(const CScript& scriptPubKey);
     bool parseEthTxParams(EthTransactionParams& params);
 
-    EthTransaction createEthTx(const EthTransactionParams& params, uint32_t idx);
+    EthTransaction createEthTx(const EthTransactionParams& params, uint32_t outIdx);
 
     const CTransaction txBit;
     const CCoinsViewCache* view;
